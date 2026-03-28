@@ -11,6 +11,12 @@ interface JobInput {
   id: string;
   description_original: string;
   completed_at: string;
+  created_at: string;
+  expense_amount: number | null;
+  expense_provider: string | null;
+  expense_category: string | null;
+  photo_count_before: number;
+  photo_count_after: number;
 }
 
 Deno.serve(async (req) => {
@@ -19,10 +25,12 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { building_name, month, jobs } = (await req.json()) as {
+    const { building_name, building_address, month, jobs, supervisor_name } = (await req.json()) as {
       building_name: string;
+      building_address?: string;
       month: string;
       jobs: JobInput[];
+      supervisor_name?: string;
     };
 
     if (!ANTHROPIC_API_KEY) {
@@ -32,22 +40,66 @@ Deno.serve(async (req) => {
       );
     }
 
-    const jobDescriptions = jobs
-      .map((j, i) => `${i + 1}. "${j.description_original}" (completado: ${j.completed_at})`)
-      .join("\n");
+    const jobDetails = jobs
+      .map((j, i) => {
+        let detail = `${i + 1}. Descripción: "${j.description_original}"`;
+        detail += `\n   Creado: ${j.created_at} → Completado: ${j.completed_at}`;
+        if (j.expense_amount) {
+          detail += `\n   Gasto: $${j.expense_amount.toLocaleString("es-AR")}`;
+          if (j.expense_provider) detail += ` — Proveedor: ${j.expense_provider}`;
+          if (j.expense_category) detail += ` — Categoría: ${j.expense_category}`;
+        }
+        if (j.photo_count_before > 0 || j.photo_count_after > 0) {
+          detail += `\n   Fotos: ${j.photo_count_before} antes, ${j.photo_count_after} después`;
+        }
+        return detail;
+      })
+      .join("\n\n");
 
-    const prompt = `Sos un redactor profesional para una administradora de consorcios/edificios en Argentina.
+    const totalExpense = jobs.reduce((sum, j) => sum + (j.expense_amount || 0), 0);
+    const categoryCounts = new Map<string, number>();
+    for (const j of jobs) {
+      if (j.expense_category) {
+        categoryCounts.set(j.expense_category, (categoryCounts.get(j.expense_category) || 0) + 1);
+      }
+    }
 
-Edificio: ${building_name}
-Mes: ${month}
+    const prompt = `Sos un redactor profesional para informes de gestión de consorcios/edificios en Argentina.
 
-Trabajos completados este mes:
-${jobDescriptions}
+DATOS DEL EDIFICIO:
+- Nombre: ${building_name}
+${building_address ? `- Dirección: ${building_address}` : ""}
+${supervisor_name ? `- Supervisor: ${supervisor_name}` : ""}
+- Período: ${month}
+- Total de trabajos completados: ${jobs.length}
+- Gasto total del período: $${totalExpense.toLocaleString("es-AR")}
+${categoryCounts.size > 0 ? `- Categorías: ${[...categoryCounts.entries()].map(([c, n]) => `${c} (${n})`).join(", ")}` : ""}
 
-Generá en formato JSON:
-1. "summary": Un resumen ejecutivo de 2-3 oraciones, formal y conciso, sobre los trabajos realizados en el edificio este mes. NO inventes datos ni agregues información que no esté en la lista.
-2. "improved_descriptions": Un array con una descripción mejorada para cada trabajo, en el MISMO ORDEN que la lista. Mejorá la claridad y el tono pero NO inventes hechos nuevos. Cada descripción debe ser 1-2 oraciones.
-3. "closing": Un párrafo de cierre breve y profesional.
+TRABAJOS COMPLETADOS:
+${jobDetails}
+
+INSTRUCCIONES:
+Generá un informe de gestión mensual en formato JSON con esta estructura:
+
+1. "summary": Resumen ejecutivo de 3-5 oraciones. Mencioná la cantidad de trabajos, las categorías principales, el gasto total si hay gastos, y un comentario general sobre el estado del edificio. Sé profesional pero accesible.
+
+2. "sections": Un array de secciones. Podés agrupar los trabajos como te parezca mejor (por categoría, por urgencia, por tipo). Cada sección tiene:
+   - "title": Título de la sección (ej: "Plomería", "Mantenimiento General", "Reparaciones Eléctricas")
+   - "job_ids": Array con los IDs de los trabajos que van en esta sección (usá los IDs originales que te pasé)
+   - "section_summary": Una oración resumiendo los trabajos de esta sección (opcional, puede ser null)
+
+3. "improved_descriptions": Un objeto donde cada key es el ID del trabajo y el value es la descripción mejorada. Mejorá la claridad y el tono profesional. Incluí información relevante del gasto si lo tiene (monto y proveedor). NO inventes hechos nuevos. 2-3 oraciones máximo por trabajo.
+
+4. "expense_summary": Si hay gastos, un párrafo corto resumiendo el gasto total y el desglose por categoría. Si no hay gastos, null.
+
+5. "closing": Párrafo de cierre profesional de 2-3 oraciones.
+
+REGLAS:
+- NO inventes datos ni agregues información que no esté en la lista
+- Los gastos NO son públicos para propietarios: mencioná que se realizaron trabajos pero NO incluyas montos específicos en las descripciones. El expense_summary es solo para uso interno del administrador.
+- Sé formal pero claro, sin jerga técnica innecesaria
+- Priorizá agrupar por categoría si hay categorías definidas, sino agrupá como tenga más sentido
+- Todos los trabajos deben aparecer en alguna sección
 
 Respondé SOLO con JSON válido, sin markdown ni texto adicional.`;
 
@@ -60,7 +112,7 @@ Respondé SOLO con JSON válido, sin markdown ni texto adicional.`;
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 2048,
+        max_tokens: 4096,
         messages: [{ role: "user", content: prompt }],
       }),
     });

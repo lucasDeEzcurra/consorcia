@@ -30,6 +30,12 @@ interface JobWithMedia extends Job {
   improved_description: string;
 }
 
+interface ReportSection {
+  title: string;
+  job_ids: string[];
+  section_summary: string | null;
+}
+
 function formatMonthLabel(month: string) {
   const [y, m] = month.split("-");
   const date = new Date(Number(y), Number(m) - 1);
@@ -73,6 +79,8 @@ export function ReportPage() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiUsed, setAiUsed] = useState(false);
   const [regeneratingAi, setRegeneratingAi] = useState(false);
+  const [sections, setSections] = useState<ReportSection[]>([]);
+  const [expenseSummary, setExpenseSummary] = useState<string | null>(null);
 
   // Email config
   const [emailSubject, setEmailSubject] = useState("");
@@ -178,12 +186,24 @@ export function ReportPage() {
             const parsed = JSON.parse(report.generated_text);
             setSummary(parsed.summary ?? "");
             setClosing(parsed.closing ?? "");
+            setExpenseSummary(parsed.expense_summary ?? null);
+            if (parsed.sections) {
+              setSections(parsed.sections);
+            }
             if (parsed.improved_descriptions) {
               setAiUsed(true);
-              for (let i = 0; i < jobsWithMedia.length; i++) {
-                if (parsed.improved_descriptions[i]) {
-                  jobsWithMedia[i]!.improved_description =
-                    parsed.improved_descriptions[i];
+              // Handle both object {id: desc} and array [desc] formats
+              if (Array.isArray(parsed.improved_descriptions)) {
+                for (let i = 0; i < jobsWithMedia.length; i++) {
+                  if (parsed.improved_descriptions[i]) {
+                    jobsWithMedia[i]!.improved_description =
+                      parsed.improved_descriptions[i];
+                  }
+                }
+              } else {
+                for (const [id, desc] of Object.entries(parsed.improved_descriptions)) {
+                  const job = jobsWithMedia.find((j) => j.id === id);
+                  if (job) job.improved_description = desc as string;
                 }
               }
               setJobs([...jobsWithMedia]);
@@ -230,11 +250,19 @@ export function ReportPage() {
       const response = await supabase.functions.invoke("generate-report", {
         body: {
           building_name: bld.name,
+          building_address: bld.address,
           month: formatMonthLabel(month),
+          supervisor_name: supervisor?.name,
           jobs: jobsWithMedia.map((j) => ({
             id: j.id,
             description_original: j.description_original,
             completed_at: formatDate(j.completed_at!),
+            created_at: formatDate(j.created_at),
+            expense_amount: j.expense_amount,
+            expense_provider: j.expense_provider,
+            expense_category: j.expense_category,
+            photo_count_before: j.media.filter((m) => m.type === "before").length,
+            photo_count_after: j.media.filter((m) => m.type === "after").length,
           })),
         },
       });
@@ -245,7 +273,9 @@ export function ReportPage() {
 
       const data = response.data as {
         summary: string;
-        improved_descriptions: string[];
+        sections?: ReportSection[];
+        improved_descriptions: Record<string, string> | string[];
+        expense_summary?: string | null;
         closing: string;
         error?: string;
       };
@@ -254,26 +284,7 @@ export function ReportPage() {
         throw new Error(data.error);
       }
 
-      setSummary(data.summary);
-      setClosing(data.closing);
-      setAiUsed(true);
-
-      const updated = jobsWithMedia.map((j, i) => ({
-        ...j,
-        improved_description:
-          data.improved_descriptions[i] ?? j.description_original,
-      }));
-      setJobs(updated);
-
-      for (let i = 0; i < updated.length; i++) {
-        const job = updated[i]!;
-        if (data.improved_descriptions[i]) {
-          await supabase
-            .from("jobs")
-            .update({ description_generated: data.improved_descriptions[i] })
-            .eq("id", job.id);
-        }
-      }
+      applyAiResult(data, jobsWithMedia);
     } catch (err) {
       const msg = (err as Error).message;
       setAiError(msg);
@@ -283,9 +294,62 @@ export function ReportPage() {
       setClosing(
         "Quedamos a disposición para cualquier consulta o requerimiento."
       );
+      setSections([]);
+      setExpenseSummary(null);
     }
 
     setStep("preview");
+  };
+
+  const applyAiResult = async (
+    data: {
+      summary: string;
+      sections?: ReportSection[];
+      improved_descriptions: Record<string, string> | string[];
+      expense_summary?: string | null;
+      closing: string;
+    },
+    currentJobs: JobWithMedia[]
+  ) => {
+    setSummary(data.summary);
+    setClosing(data.closing);
+    setAiUsed(true);
+    setExpenseSummary(data.expense_summary ?? null);
+
+    if (data.sections && data.sections.length > 0) {
+      setSections(data.sections);
+    } else {
+      setSections([]);
+    }
+
+    // Handle both object {id: desc} and array [desc] formats
+    const descMap = new Map<string, string>();
+    const descs = data.improved_descriptions;
+    if (Array.isArray(descs)) {
+      currentJobs.forEach((j, i) => {
+        if (descs[i]) descMap.set(j.id, descs[i]);
+      });
+    } else {
+      for (const [id, desc] of Object.entries(descs)) {
+        descMap.set(id, desc);
+      }
+    }
+
+    const updated = currentJobs.map((j) => ({
+      ...j,
+      improved_description: descMap.get(j.id) ?? j.description_original,
+    }));
+    setJobs(updated);
+
+    for (const job of updated) {
+      const desc = descMap.get(job.id);
+      if (desc) {
+        await supabase
+          .from("jobs")
+          .update({ description_generated: desc })
+          .eq("id", job.id);
+      }
+    }
   };
 
   const handleRegenerateAi = async () => {
@@ -298,11 +362,19 @@ export function ReportPage() {
       const response = await supabase.functions.invoke("generate-report", {
         body: {
           building_name: building.name,
+          building_address: building.address,
           month: formatMonthLabel(month),
+          supervisor_name: supervisor?.name,
           jobs: jobs.map((j) => ({
             id: j.id,
             description_original: j.description_original,
             completed_at: formatDate(j.completed_at!),
+            created_at: formatDate(j.created_at),
+            expense_amount: j.expense_amount,
+            expense_provider: j.expense_provider,
+            expense_category: j.expense_category,
+            photo_count_before: j.media.filter((m) => m.type === "before").length,
+            photo_count_after: j.media.filter((m) => m.type === "after").length,
           })),
         },
       });
@@ -311,33 +383,16 @@ export function ReportPage() {
 
       const data = response.data as {
         summary: string;
-        improved_descriptions: string[];
+        sections?: ReportSection[];
+        improved_descriptions: Record<string, string> | string[];
+        expense_summary?: string | null;
         closing: string;
         error?: string;
       };
 
       if (data.error) throw new Error(data.error);
 
-      setSummary(data.summary);
-      setClosing(data.closing);
-      setAiUsed(true);
-
-      const updated = jobs.map((j, i) => ({
-        ...j,
-        improved_description:
-          data.improved_descriptions[i] ?? j.description_original,
-      }));
-      setJobs(updated);
-
-      for (let i = 0; i < updated.length; i++) {
-        const job = updated[i]!;
-        if (data.improved_descriptions[i]) {
-          await supabase
-            .from("jobs")
-            .update({ description_generated: data.improved_descriptions[i] })
-            .eq("id", job.id);
-        }
-      }
+      await applyAiResult(data, jobs);
     } catch (err) {
       setAiError((err as Error).message);
     } finally {
@@ -416,7 +471,11 @@ export function ReportPage() {
       const reportText = JSON.stringify({
         summary,
         closing,
-        improved_descriptions: jobs.map((j) => j.improved_description),
+        sections,
+        expense_summary: expenseSummary,
+        improved_descriptions: Object.fromEntries(
+          jobs.map((j) => [j.id, j.improved_description])
+        ),
       });
 
       if (existingReport) {
@@ -653,6 +712,100 @@ export function ReportPage() {
     );
   }
 
+  const renderJob = (job: JobWithMedia, jobIndex: number) => (
+    <div key={job.id} className="space-y-3">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">
+          {jobIndex + 1}
+        </span>
+        <div className="flex-1">
+          <div
+            className="text-sm leading-relaxed text-slate-800 rounded-lg transition-colors hover:bg-amber-50/50 px-2 py-1 -mx-2"
+            contentEditable
+            suppressContentEditableWarning
+            onBlur={(e) =>
+              updateJobDescription(
+                jobIndex,
+                e.currentTarget.textContent ?? ""
+              )
+            }
+            style={{ outline: "none" }}
+          >
+            {job.improved_description}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 px-2 -mx-2">
+            <p className="text-xs text-slate-400">
+              Completado: {formatDate(job.completed_at!)}
+            </p>
+            {job.expense_category && (
+              <p className="text-xs text-slate-400">
+                {job.expense_category}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Photos */}
+      {job.media.length > 0 && (
+        <div className="ml-9 grid grid-cols-2 gap-2">
+          {job.media
+            .filter((m) => m.type === "before")
+            .map((m) => (
+              <div key={m.id} className="relative group">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  Antes
+                </p>
+                <img
+                  src={m.url}
+                  alt="Antes"
+                  className={`w-full rounded-lg border border-slate-200 object-cover transition-opacity ${excludedMedia.has(m.id) ? "opacity-30" : ""}`}
+                  crossOrigin="anonymous"
+                />
+                <button
+                  onClick={() => setExcludedMedia((prev) => {
+                    const next = new Set(prev);
+                    next.has(m.id) ? next.delete(m.id) : next.add(m.id);
+                    return next;
+                  })}
+                  className="absolute top-6 right-1 flex size-7 items-center justify-center rounded-lg bg-white/90 text-slate-500 shadow-sm opacity-0 transition-opacity group-hover:opacity-100 hover:text-amber-600"
+                  title={excludedMedia.has(m.id) ? "Incluir en PDF" : "Excluir del PDF"}
+                >
+                  {excludedMedia.has(m.id) ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                </button>
+              </div>
+            ))}
+          {job.media
+            .filter((m) => m.type === "after")
+            .map((m) => (
+              <div key={m.id} className="relative group">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  Después
+                </p>
+                <img
+                  src={m.url}
+                  alt="Después"
+                  className={`w-full rounded-lg border border-slate-200 object-cover transition-opacity ${excludedMedia.has(m.id) ? "opacity-30" : ""}`}
+                  crossOrigin="anonymous"
+                />
+                <button
+                  onClick={() => setExcludedMedia((prev) => {
+                    const next = new Set(prev);
+                    next.has(m.id) ? next.delete(m.id) : next.add(m.id);
+                    return next;
+                  })}
+                  className="absolute top-6 right-1 flex size-7 items-center justify-center rounded-lg bg-white/90 text-slate-500 shadow-sm opacity-0 transition-opacity group-hover:opacity-100 hover:text-amber-600"
+                  title={excludedMedia.has(m.id) ? "Incluir en PDF" : "Excluir del PDF"}
+                >
+                  {excludedMedia.has(m.id) ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                </button>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+
   // -- Preview --
   return (
     <div className="space-y-6">
@@ -802,7 +955,7 @@ export function ReportPage() {
 
         <hr className="my-6 border-slate-200" />
 
-        {/* Jobs */}
+        {/* Jobs — grouped by sections if available */}
         <div className="mb-6">
           <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-500">
             Trabajos realizados
@@ -812,101 +965,72 @@ export function ReportPage() {
             <p className="text-sm text-slate-500 italic">
               No se completaron trabajos durante este período.
             </p>
+          ) : sections.length > 0 ? (
+            <div className="space-y-8">
+              {sections.map((section, si) => {
+                const sectionJobs = section.job_ids
+                  .map((id) => jobs.find((j) => j.id === id))
+                  .filter(Boolean) as JobWithMedia[];
+
+                if (sectionJobs.length === 0) return null;
+
+                return (
+                  <div key={si} className="space-y-4">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-800" style={{ fontFamily: "Georgia, serif" }}>
+                        {section.title}
+                      </h3>
+                      {section.section_summary && (
+                        <p className="mt-1 text-xs text-slate-500 italic">
+                          {section.section_summary}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-5">
+                      {sectionJobs.map((job) => {
+                        const jobIndex = jobs.findIndex((j) => j.id === job.id);
+                        return renderJob(job, jobIndex);
+                      })}
+                    </div>
+
+                    {si < sections.length - 1 && (
+                      <hr className="border-slate-200" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           ) : (
             <div className="space-y-6">
-              {jobs.map((job, i) => (
-                <div key={job.id} className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">
-                      {i + 1}
-                    </span>
-                    <div className="flex-1">
-                      <div
-                        className="text-sm leading-relaxed text-slate-800 rounded-lg transition-colors hover:bg-amber-50/50 px-2 py-1 -mx-2"
-                        contentEditable
-                        suppressContentEditableWarning
-                        onBlur={(e) =>
-                          updateJobDescription(
-                            i,
-                            e.currentTarget.textContent ?? ""
-                          )
-                        }
-                        style={{ outline: "none" }}
-                      >
-                        {job.improved_description}
-                      </div>
-                      <p className="mt-1 text-xs text-slate-400 px-2 -mx-2">
-                        Completado: {formatDate(job.completed_at!)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Photos */}
-                  {job.media.length > 0 && (
-                    <div className="ml-9 grid grid-cols-2 gap-2">
-                      {job.media
-                        .filter((m) => m.type === "before")
-                        .map((m) => (
-                          <div key={m.id} className="relative group">
-                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                              Antes
-                            </p>
-                            <img
-                              src={m.url}
-                              alt="Antes"
-                              className={`w-full rounded-lg border border-slate-200 object-cover transition-opacity ${excludedMedia.has(m.id) ? "opacity-30" : ""}`}
-                              crossOrigin="anonymous"
-                            />
-                            <button
-                              onClick={() => setExcludedMedia((prev) => {
-                                const next = new Set(prev);
-                                next.has(m.id) ? next.delete(m.id) : next.add(m.id);
-                                return next;
-                              })}
-                              className="absolute top-6 right-1 flex size-7 items-center justify-center rounded-lg bg-white/90 text-slate-500 shadow-sm opacity-0 transition-opacity group-hover:opacity-100 hover:text-amber-600"
-                              title={excludedMedia.has(m.id) ? "Incluir en PDF" : "Excluir del PDF"}
-                            >
-                              {excludedMedia.has(m.id) ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                            </button>
-                          </div>
-                        ))}
-                      {job.media
-                        .filter((m) => m.type === "after")
-                        .map((m) => (
-                          <div key={m.id} className="relative group">
-                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                              Después
-                            </p>
-                            <img
-                              src={m.url}
-                              alt="Después"
-                              className={`w-full rounded-lg border border-slate-200 object-cover transition-opacity ${excludedMedia.has(m.id) ? "opacity-30" : ""}`}
-                              crossOrigin="anonymous"
-                            />
-                            <button
-                              onClick={() => setExcludedMedia((prev) => {
-                                const next = new Set(prev);
-                                next.has(m.id) ? next.delete(m.id) : next.add(m.id);
-                                return next;
-                              })}
-                              className="absolute top-6 right-1 flex size-7 items-center justify-center rounded-lg bg-white/90 text-slate-500 shadow-sm opacity-0 transition-opacity group-hover:opacity-100 hover:text-amber-600"
-                              title={excludedMedia.has(m.id) ? "Incluir en PDF" : "Excluir del PDF"}
-                            >
-                              {excludedMedia.has(m.id) ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                            </button>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-
-                  {i < jobs.length - 1 && (
-                    <hr className="border-slate-100" />
-                  )}
-                </div>
-              ))}
+              {jobs.map((job, i) => renderJob(job, i))}
             </div>
           )}
         </div>
+
+        {/* Expense summary (internal, not in PDF) */}
+        {expenseSummary && (
+          <>
+            <hr className="my-6 border-slate-200" />
+            <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+              <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-amber-600">
+                Resumen de gastos (uso interno)
+              </h2>
+              <div
+                className="text-sm leading-relaxed text-amber-900 rounded-lg transition-colors hover:bg-amber-50 px-2 py-1 -mx-2"
+                contentEditable
+                suppressContentEditableWarning
+                onBlur={(e) => setExpenseSummary(e.currentTarget.textContent ?? "")}
+                style={{ outline: "none" }}
+              >
+                {expenseSummary}
+              </div>
+              <p className="mt-2 text-[10px] text-amber-500">
+                Esta sección no se incluye en el PDF enviado a propietarios.
+              </p>
+            </div>
+          </>
+        )}
 
         <hr className="my-6 border-slate-200" />
 
