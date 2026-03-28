@@ -49,25 +49,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (!mounted) return;
       const thisVersion = ++authVersion.current;
 
-      if (newSession?.user) {
+      if (!newSession) {
+        // No session — update immediately (no DB query needed)
+        setSession(null);
+        setRole(null);
+        if (!initDone.current) {
+          initDone.current = true;
+          setLoading(false);
+        }
+        return;
+      }
+
+      // IMPORTANT: Defer fetchRole with setTimeout to avoid deadlocking
+      // with Supabase's internal auth lock. The onAuthStateChange callback
+      // runs inside a lock that's also needed by any supabase.from() query.
+      // Calling fetchRole directly here would deadlock on TOKEN_REFRESHED
+      // (when returning to a backgrounded tab).
+      setTimeout(async () => {
+        if (!mounted || authVersion.current !== thisVersion) return;
         const r = await fetchRole(newSession.user.id);
-        // A newer event arrived while fetchRole was in-flight — discard this result
         if (!mounted || authVersion.current !== thisVersion) return;
         setSession(newSession);
         setRole(r);
-      } else {
-        setSession(null);
-        setRole(null);
-      }
-
-      if (!initDone.current) {
-        initDone.current = true;
-        setLoading(false);
-      }
+        if (!initDone.current) {
+          initDone.current = true;
+          setLoading(false);
+        }
+      }, 0);
     });
 
     // Safety net: if onAuthStateChange never fires (e.g. token refresh hangs),
