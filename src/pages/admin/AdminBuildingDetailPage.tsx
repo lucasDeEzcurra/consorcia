@@ -34,10 +34,8 @@ import {
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
-function normalizePhone(p: string): string {
-  let n = p.trim().replace(/[\s\-()]/g, "");
-  if (!n.startsWith("+")) n = "+" + n;
-  return n;
+function normalizeTelegramId(p: string): string {
+  return p.trim().replace(/[^0-9]/g, "");
 }
 
 function formatDate(d: string) {
@@ -146,7 +144,7 @@ export function AdminBuildingDetailPage() {
     const { error } = await supabase.from("tenants").insert({
       building_id: id,
       name: tenantName.trim(),
-      phone_number: normalizePhone(tenantPhone),
+      phone_number: normalizeTelegramId(tenantPhone),
       unit: tenantUnit.trim() || null,
     });
 
@@ -643,7 +641,7 @@ export function AdminBuildingDetailPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Telegram ID</label>
-              <Input value={tenantPhone} onChange={(e) => setTenantPhone(e.target.value)} required placeholder="+5491156789012" className="h-10 rounded-xl" />
+              <Input value={tenantPhone} onChange={(e) => setTenantPhone(e.target.value)} required placeholder="123456789" className="h-10 rounded-xl" />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Unidad (opcional)</label>

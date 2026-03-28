@@ -15,10 +15,8 @@ import {
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
-function normalizePhone(p: string): string {
-  let n = p.trim().replace(/[\s\-()]/g, "");
-  if (!n.startsWith("+")) n = "+" + n;
-  return n;
+function normalizeTelegramId(p: string): string {
+  return p.trim().replace(/[^0-9]/g, "");
 }
 
 export function SupervisorDetailPage() {
@@ -79,7 +77,7 @@ export function SupervisorDetailPage() {
     setSaving(true);
     await supabase
       .from("supervisors")
-      .update({ name: name.trim(), phone_number: normalizePhone(phone) })
+      .update({ name: name.trim(), phone_number: normalizeTelegramId(phone) })
       .eq("id", id);
     setSaving(false);
     fetchData();

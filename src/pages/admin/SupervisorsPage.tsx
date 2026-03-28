@@ -15,10 +15,8 @@ import { Plus, Users, ChevronRight, Loader2, KeyRound } from "lucide-react";
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
-function normalizePhone(p: string): string {
-  let n = p.trim().replace(/[\s\-()]/g, "");
-  if (!n.startsWith("+")) n = "+" + n;
-  return n;
+function normalizeTelegramId(p: string): string {
+  return p.trim().replace(/[^0-9]/g, "");
 }
 
 interface SupervisorWithCount extends Supervisor {
@@ -77,7 +75,7 @@ export function SupervisorsPage() {
     const { error } = await supabase.functions.invoke("create-supervisor", {
       body: {
         name: name.trim(),
-        phone_number: normalizePhone(phone),
+        phone_number: normalizeTelegramId(phone),
         email: email.trim(),
         password,
       },
@@ -182,7 +180,7 @@ export function SupervisorsPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Telegram ID</label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="+5491112345678" className="h-10 rounded-xl" />
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="123456789" className="h-10 rounded-xl" />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Email</label>
