@@ -2,7 +2,16 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import type { Supervisor } from "@/types/database";
-import { Building2, ClipboardList, CheckCircle2, Users } from "lucide-react";
+import {
+  Building2,
+  ClipboardList,
+  CheckCircle2,
+  Users,
+  ChevronRight,
+  Loader2,
+} from "lucide-react";
+
+const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
 interface SupervisorWithCount extends Supervisor {
   building_count: number;
@@ -74,64 +83,83 @@ export function AdminDashboardPage() {
     fetch();
   }, []);
 
-  if (loading) return <p className="text-sm text-muted-foreground">Cargando...</p>;
+  if (loading) {
+    return (
+      <div className="flex items-center gap-3 py-20 justify-center">
+        <Loader2 className="size-5 animate-spin text-amber-500" />
+        <span className="text-sm text-slate-500">Cargando...</span>
+      </div>
+    );
+  }
 
   const cards = [
-    { label: "Supervisores", value: metrics.totalSupervisors, icon: Users },
-    { label: "Edificios", value: metrics.totalBuildings, icon: Building2 },
-    { label: "Trabajos pendientes", value: metrics.pendingJobs, icon: ClipboardList },
-    { label: "Completados este mes", value: metrics.completedThisMonth, icon: CheckCircle2 },
+    { label: "Supervisores", value: metrics.totalSupervisors, icon: Users, color: "bg-amber-500", iconColor: "text-[#0b1120]" },
+    { label: "Edificios", value: metrics.totalBuildings, icon: Building2, color: "bg-blue-500", iconColor: "text-white" },
+    { label: "Trabajos pendientes", value: metrics.pendingJobs, icon: ClipboardList, color: "bg-rose-500", iconColor: "text-white" },
+    { label: "Completados este mes", value: metrics.completedThisMonth, icon: CheckCircle2, color: "bg-emerald-500", iconColor: "text-white" },
   ];
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-xl font-bold tracking-tight">Dashboard</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="text-3xl text-slate-900 sm:text-4xl" style={serif}>
+          Dashboard
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
           Vista general de la administración.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {cards.map((c) => (
-          <div key={c.label} className="rounded-lg border bg-card p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
-                <c.icon className="size-5 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{c.value}</p>
-                <p className="text-xs text-muted-foreground">{c.label}</p>
-              </div>
+          <div key={c.label} className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
+            <div className={`mb-3 inline-flex size-10 items-center justify-center rounded-xl ${c.color}`}>
+              <c.icon className={`size-5 ${c.iconColor}`} />
             </div>
+            <p className="text-2xl font-bold text-slate-900 sm:text-3xl">{c.value}</p>
+            <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">{c.label}</p>
           </div>
         ))}
       </div>
 
       <div>
-        <h3 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
+        <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
           Supervisores
-        </h3>
+        </h2>
         <div className="space-y-2">
           {supervisors.map((s) => (
             <Link
               key={s.id}
               to={`/admin/supervisors/${s.id}`}
-              className="flex items-center justify-between rounded-lg border bg-card p-4 transition-colors hover:bg-accent"
+              className="group flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-sm transition-all hover:border-amber-200 hover:shadow-md"
             >
-              <div>
-                <p className="text-sm font-medium">{s.name}</p>
-                <p className="text-xs text-muted-foreground">{s.phone_number}</p>
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-slate-100 transition-colors group-hover:bg-amber-50">
+                  <Users className="size-5 text-slate-400 transition-colors group-hover:text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{s.name}</p>
+                  <p className="text-xs text-slate-400">{s.phone_number}</p>
+                </div>
               </div>
-              <span className="text-xs text-muted-foreground">
-                {s.building_count} edificio{s.building_count !== 1 ? "s" : ""}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">
+                  {s.building_count} edificio{s.building_count !== 1 ? "s" : ""}
+                </span>
+                <ChevronRight className="size-4 text-slate-300 transition-colors group-hover:text-amber-500" />
+              </div>
             </Link>
           ))}
           {supervisors.length === 0 && (
-            <p className="text-sm text-muted-foreground py-8 text-center">
-              No hay supervisores creados.
-            </p>
+            <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center">
+              <Users className="mx-auto size-10 text-slate-300" />
+              <p className="mt-3 text-sm font-medium text-slate-500">
+                No hay supervisores creados
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                Creá un supervisor desde la sección Supervisores.
+              </p>
+            </div>
           )}
         </div>
       </div>

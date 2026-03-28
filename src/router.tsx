@@ -12,8 +12,13 @@ import { SupervisorsPage } from "@/pages/admin/SupervisorsPage";
 import { SupervisorDetailPage } from "@/pages/admin/SupervisorDetailPage";
 import { AdminBuildingsPage } from "@/pages/admin/AdminBuildingsPage";
 import { AdminBuildingDetailPage } from "@/pages/admin/AdminBuildingDetailPage";
+import { LandingPage } from "@/pages/LandingPage";
 
 export const router = createBrowserRouter([
+  {
+    path: "/",
+    element: <LandingPage />,
+  },
   {
     path: "/login",
     element: <LoginPage />,

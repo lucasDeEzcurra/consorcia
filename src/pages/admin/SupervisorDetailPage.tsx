@@ -4,13 +4,15 @@ import { supabase } from "@/lib/supabase";
 import type { Supervisor, Building } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Building2, Save, Trash2, Plus } from "lucide-react";
+import { ArrowLeft, Building2, Save, Trash2, Plus, Loader2, AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
 export function SupervisorDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -80,75 +82,115 @@ export function SupervisorDetailPage() {
   const handleDelete = async () => {
     if (!id || !supervisor) return;
     setDeleting(true);
-    // Unassign buildings first
     await supabase.from("buildings").update({ supervisor_id: null }).eq("supervisor_id", id);
-    // Delete supervisor (cascade will handle whatsapp_sessions)
     await supabase.from("supervisors").delete().eq("id", id);
-    // Delete user profile and auth user
     await supabase.from("user_profiles").delete().eq("user_id", supervisor.user_id);
     setDeleting(false);
     window.location.href = "/admin/supervisors";
   };
 
-  if (loading) return <p className="text-sm text-muted-foreground">Cargando...</p>;
-  if (!supervisor) return <p className="text-sm text-muted-foreground">Supervisor no encontrado.</p>;
+  if (loading) {
+    return (
+      <div className="flex items-center gap-3 py-20 justify-center">
+        <Loader2 className="size-5 animate-spin text-amber-500" />
+        <span className="text-sm text-slate-500">Cargando...</span>
+      </div>
+    );
+  }
+
+  if (!supervisor) {
+    return (
+      <div className="py-20 text-center">
+        <p className="text-sm text-slate-500">Supervisor no encontrado.</p>
+        <Link to="/admin/supervisors" className="mt-2 inline-block text-sm text-amber-600 hover:text-amber-500">
+          Volver a supervisores
+        </Link>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Header */}
       <div className="flex items-center gap-3">
-        <Link to="/admin/supervisors" className="flex size-8 items-center justify-center rounded-lg hover:bg-muted">
-          <ArrowLeft className="size-4" />
+        <Link
+          to="/admin/supervisors"
+          className="flex size-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+        >
+          <ArrowLeft className="size-5" />
         </Link>
-        <h2 className="text-xl font-bold tracking-tight">{supervisor.name}</h2>
+        <h1 className="text-2xl text-slate-900 sm:text-3xl" style={serif}>
+          {supervisor.name}
+        </h1>
       </div>
 
       {/* Edit form */}
-      <form onSubmit={handleSave} className="max-w-md space-y-3 rounded-lg border p-4">
-        <p className="text-sm font-medium">Datos del supervisor</p>
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Nombre</label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required />
+      <form onSubmit={handleSave} className="max-w-md space-y-4 rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
+        <p className="text-sm font-semibold text-slate-800">Datos del supervisor</p>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-slate-500">Nombre</label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} required className="h-10 rounded-xl" />
         </div>
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Teléfono (WhatsApp)</label>
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} required />
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-slate-500">Teléfono (WhatsApp)</label>
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} required className="h-10 rounded-xl" />
         </div>
-        <Button type="submit" size="sm" disabled={saving}>
-          <Save className="size-4" />
-          {saving ? "Guardando..." : "Guardar cambios"}
+        <Button type="submit" size="sm" disabled={saving} className="rounded-xl bg-amber-500 text-[#0b1120] hover:bg-amber-400">
+          {saving ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              Guardando...
+            </>
+          ) : (
+            <>
+              <Save className="size-4" />
+              Guardar cambios
+            </>
+          )}
         </Button>
       </form>
 
       {/* Assigned buildings */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+          <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
             Edificios asignados
-          </h3>
-          <Button size="sm" variant="outline" onClick={() => setAssignOpen(true)}>
+          </h2>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setAssignOpen(true)}
+            className="rounded-xl"
+          >
             <Plus className="size-4" />
             Asignar edificio
           </Button>
         </div>
 
         {buildings.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">
-            No tiene edificios asignados.
-          </p>
+          <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center">
+            <Building2 className="mx-auto size-8 text-slate-300" />
+            <p className="mt-2 text-sm text-slate-500">No tiene edificios asignados.</p>
+          </div>
         ) : (
           <div className="space-y-2">
             {buildings.map((b) => (
-              <div key={b.id} className="flex items-center justify-between rounded-lg border p-3">
-                <div className="flex items-center gap-2">
-                  <Building2 className="size-4 text-muted-foreground" />
+              <div key={b.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-9 items-center justify-center rounded-lg bg-slate-100">
+                    <Building2 className="size-4 text-slate-400" />
+                  </div>
                   <div>
-                    <p className="text-sm font-medium">{b.name}</p>
-                    <p className="text-xs text-muted-foreground">{b.address}</p>
+                    <p className="text-sm font-medium text-slate-800">{b.name}</p>
+                    <p className="text-xs text-slate-400">{b.address}</p>
                   </div>
                 </div>
-                <Button size="sm" variant="ghost" onClick={() => unassignBuilding(b.id)}>
-                  <Trash2 className="size-3.5 text-muted-foreground" />
-                </Button>
+                <button
+                  onClick={() => unassignBuilding(b.id)}
+                  className="flex size-8 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-red-50 hover:text-red-500"
+                >
+                  <Trash2 className="size-4" />
+                </button>
               </div>
             ))}
           </div>
@@ -156,21 +198,26 @@ export function SupervisorDetailPage() {
       </div>
 
       {/* Delete supervisor */}
-      <div className="border-t pt-6">
+      <div className="border-t border-slate-100 pt-6">
         {confirmDelete ? (
-          <div className="flex items-center gap-3">
-            <p className="text-sm text-destructive">
-              ¿Eliminar a {supervisor.name}? Los edificios serán desasignados.
-            </p>
-            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
-              {deleting ? "Eliminando..." : "Confirmar"}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
-              Cancelar
-            </Button>
+          <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="size-5 shrink-0 text-red-500 mt-0.5" />
+              <p className="text-sm text-red-700">
+                ¿Eliminar a {supervisor.name}? Los edificios serán desasignados.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting} className="rounded-xl">
+                {deleting ? "Eliminando..." : "Confirmar"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)} className="rounded-xl">
+                Cancelar
+              </Button>
+            </div>
           </div>
         ) : (
-          <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>
+          <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)} className="rounded-xl">
             <Trash2 className="size-4" />
             Eliminar supervisor
           </Button>
@@ -184,21 +231,24 @@ export function SupervisorDetailPage() {
             <DialogTitle>Asignar edificio</DialogTitle>
           </DialogHeader>
           {unassigned.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No hay edificios sin asignar.
-            </p>
+            <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center">
+              <Building2 className="mx-auto size-8 text-slate-300" />
+              <p className="mt-2 text-sm text-slate-500">No hay edificios sin asignar.</p>
+            </div>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {unassigned.map((b) => (
                 <button
                   key={b.id}
                   onClick={() => assignBuilding(b.id)}
-                  className="flex w-full items-center gap-2 rounded-lg border p-3 text-left hover:bg-accent transition-colors"
+                  className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3.5 text-left transition-all hover:border-amber-200 hover:bg-amber-50"
                 >
-                  <Building2 className="size-4 text-muted-foreground" />
+                  <div className="flex size-9 items-center justify-center rounded-lg bg-slate-100">
+                    <Building2 className="size-4 text-slate-400" />
+                  </div>
                   <div>
-                    <p className="text-sm font-medium">{b.name}</p>
-                    <p className="text-xs text-muted-foreground">{b.address}</p>
+                    <p className="text-sm font-medium text-slate-800">{b.name}</p>
+                    <p className="text-xs text-slate-400">{b.address}</p>
                   </div>
                 </button>
               ))}

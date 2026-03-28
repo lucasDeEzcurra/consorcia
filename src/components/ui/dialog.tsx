@@ -35,7 +35,7 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={(e) => {
         if (e.target === overlayRef.current) onOpenChange(false);
       }}
@@ -58,7 +58,7 @@ function DialogContent({
     <div
       role="dialog"
       className={cn(
-        "relative grid w-full max-w-lg max-h-[85vh] overflow-y-auto gap-4 rounded-xl border bg-background p-6 shadow-lg",
+        "relative grid w-full max-w-lg max-h-[90vh] sm:max-h-[85vh] overflow-y-auto gap-4 rounded-t-2xl sm:rounded-2xl border bg-white p-5 sm:p-6 shadow-xl",
         className
       )}
     >
@@ -66,7 +66,7 @@ function DialogContent({
       {onClose && (
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+          className="absolute right-4 top-4 flex size-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
         >
           <X className="size-4" />
         </button>
@@ -95,7 +95,10 @@ function DialogTitle({
   children: ReactNode;
 }) {
   return (
-    <h3 className={cn("text-lg font-semibold leading-none", className)}>
+    <h3
+      className={cn("text-lg font-semibold leading-none text-slate-900", className)}
+      style={{ fontFamily: "'Instrument Serif', Georgia, serif" }}
+    >
       {children}
     </h3>
   );
@@ -109,7 +112,7 @@ function DialogDescription({
   children: ReactNode;
 }) {
   return (
-    <p className={cn("text-sm text-muted-foreground", className)}>{children}</p>
+    <p className={cn("text-sm text-slate-500", className)}>{children}</p>
   );
 }
 

@@ -3,7 +3,16 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { Building } from "@/types/database";
-import { Building2, ClipboardList, CheckCircle2, FileText } from "lucide-react";
+import {
+  Building2,
+  ClipboardList,
+  CheckCircle2,
+  FileText,
+  ChevronRight,
+  Loader2,
+} from "lucide-react";
+
+const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
 interface BuildingWithPendingCount extends Building {
   pending_count: number;
@@ -36,7 +45,6 @@ export function DashboardPage() {
     if (!user) return;
 
     async function fetchData() {
-      // Get supervisor row for this user
       const { data: supervisor } = await supabase
         .from("supervisors")
         .select("id")
@@ -48,7 +56,6 @@ export function DashboardPage() {
         return;
       }
 
-      // Fetch buildings
       const { data: buildingsData } = await supabase
         .from("buildings")
         .select("*")
@@ -63,8 +70,6 @@ export function DashboardPage() {
       }
 
       const buildingIds = buildingsList.map((b) => b.id);
-
-      // Fetch all jobs for these buildings in parallel with reports
       const month = currentMonth();
       const monthStart = `${month}-01T00:00:00.000Z`;
       const nextMonth = new Date(
@@ -97,7 +102,6 @@ export function DashboardPage() {
       const completedJobs = completedRes.data ?? [];
       const reports = reportsRes.data ?? [];
 
-      // Count pending per building
       const pendingByBuilding = new Map<string, number>();
       for (const job of pendingJobs) {
         const prev = pendingByBuilding.get(job.building_id) ?? 0;
@@ -126,7 +130,10 @@ export function DashboardPage() {
 
   if (loading) {
     return (
-      <p className="text-sm text-muted-foreground">Cargando dashboard...</p>
+      <div className="flex items-center gap-3 py-20 justify-center">
+        <Loader2 className="size-5 animate-spin text-amber-500" />
+        <span className="text-sm text-slate-500">Cargando dashboard...</span>
+      </div>
     );
   }
 
@@ -135,87 +142,100 @@ export function DashboardPage() {
       label: "Edificios asignados",
       value: metrics.totalBuildings,
       icon: Building2,
+      color: "bg-amber-500",
+      iconColor: "text-[#0b1120]",
     },
     {
       label: "Trabajos pendientes",
       value: metrics.pendingJobs,
       icon: ClipboardList,
+      color: "bg-blue-500",
+      iconColor: "text-white",
     },
     {
       label: "Completados este mes",
       value: metrics.completedThisMonth,
       icon: CheckCircle2,
+      color: "bg-emerald-500",
+      iconColor: "text-white",
     },
     {
       label: "Reportes este mes",
       value: metrics.reportsThisMonth,
       icon: FileText,
+      color: "bg-violet-500",
+      iconColor: "text-white",
     },
   ];
 
   return (
     <div className="space-y-8">
+      {/* Header */}
       <div>
-        <h2 className="text-xl font-bold tracking-tight">Dashboard</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Resumen general de edificios y trabajos.
+        <h1 className="text-3xl text-slate-900 sm:text-4xl" style={serif}>
+          Dashboard
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Resumen general de tus edificios y trabajos.
         </p>
       </div>
 
       {/* Metric cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {metricCards.map((card) => (
           <div
             key={card.label}
-            className="rounded-lg border bg-card p-4 shadow-sm"
+            className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5"
           >
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
-                <card.icon className="size-5 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{card.value}</p>
-                <p className="text-xs text-muted-foreground">{card.label}</p>
-              </div>
+            <div className={`mb-3 inline-flex size-10 items-center justify-center rounded-xl ${card.color}`}>
+              <card.icon className={`size-5 ${card.iconColor}`} />
             </div>
+            <p className="text-2xl font-bold text-slate-900 sm:text-3xl">{card.value}</p>
+            <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">{card.label}</p>
           </div>
         ))}
       </div>
 
       {/* Buildings list */}
       <div>
-        <h3 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          Edificios
-        </h3>
+        <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+          Tus edificios
+        </h2>
         {buildings.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No tenés edificios asignados.
-          </p>
+          <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center">
+            <Building2 className="mx-auto size-10 text-slate-300" />
+            <p className="mt-3 text-sm font-medium text-slate-500">
+              No tenés edificios asignados
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              Contactá a tu administrador para que te asigne edificios.
+            </p>
+          </div>
         ) : (
           <div className="space-y-2">
             {buildings.map((building) => (
               <Link
                 key={building.id}
                 to={`/buildings/${building.id}`}
-                className="flex items-center justify-between rounded-lg border bg-card p-4 transition-colors hover:bg-accent"
+                className="group flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-sm transition-all hover:border-amber-200 hover:shadow-md"
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex size-9 items-center justify-center rounded-lg bg-muted">
-                    <Building2 className="size-4 text-muted-foreground" />
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-slate-100 transition-colors group-hover:bg-amber-50">
+                    <Building2 className="size-5 text-slate-400 transition-colors group-hover:text-amber-600" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium">{building.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {building.address}
-                    </p>
+                    <p className="text-sm font-semibold text-slate-800">{building.name}</p>
+                    <p className="text-xs text-slate-400">{building.address}</p>
                   </div>
                 </div>
-                {building.pending_count > 0 && (
-                  <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
-                    {building.pending_count} pendiente
-                    {building.pending_count !== 1 ? "s" : ""}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {building.pending_count > 0 && (
+                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                      {building.pending_count} pendiente{building.pending_count !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  <ChevronRight className="size-4 text-slate-300 transition-colors group-hover:text-amber-500" />
+                </div>
               </Link>
             ))}
           </div>

@@ -14,7 +14,11 @@ import {
   Plus,
   Send,
   CheckCircle2,
+  AlertTriangle,
+  Mail,
 } from "lucide-react";
+
+const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
 type Step = "loading" | "preview" | "confirm" | "sending" | "sent";
 
@@ -70,7 +74,6 @@ export function ReportPage() {
   const fetchData = useCallback(async () => {
     if (!id) return;
 
-    // Fetch building
     const { data: bData } = await supabase
       .from("buildings")
       .select("*")
@@ -81,7 +84,6 @@ export function ReportPage() {
 
     if (!bld) return;
 
-    // Check existing report
     const { data: rData } = await supabase
       .from("reports")
       .select("*")
@@ -93,7 +95,6 @@ export function ReportPage() {
       setExistingReport(rData as Report);
     }
 
-    // Fetch completed jobs for this month
     const monthStart = `${month}-01T00:00:00.000Z`;
     const [y, m] = month.split("-");
     const nextMonth = new Date(Number(y), Number(m), 1).toISOString();
@@ -109,7 +110,6 @@ export function ReportPage() {
 
     const jobsList = (jData as Job[]) ?? [];
 
-    // Fetch media for all jobs
     const jobIds = jobsList.map((j) => j.id);
     const { data: mData } = await supabase
       .from("media")
@@ -133,7 +133,6 @@ export function ReportPage() {
 
     setJobs(jobsWithMedia);
 
-    // Set defaults for email
     setRecipients(bld.emails);
     setEmailSubject(
       `Informe de Gestión Mensual — ${bld.name} — ${formatMonthLabel(month)}`
@@ -142,9 +141,7 @@ export function ReportPage() {
       `Estimados propietarios,\n\nAdjuntamos el informe de gestión mensual correspondiente a ${formatMonthLabel(month)} del edificio ${bld.name}.\n\nQuedamos a disposición ante cualquier consulta.\n\nSaludos cordiales.`
     );
 
-    // If report already exists and was sent, show it directly
     if (rData && (rData as Report).status === "sent") {
-      // Load saved text
       const report = rData as Report;
       if (report.generated_text) {
         try {
@@ -168,7 +165,6 @@ export function ReportPage() {
       return;
     }
 
-    // Generate AI text
     await generateAiText(bld, jobsWithMedia);
   }, [id, month]);
 
@@ -219,7 +215,6 @@ export function ReportPage() {
       setSummary(data.summary);
       setClosing(data.closing);
 
-      // Update job descriptions
       const updated = jobsWithMedia.map((j, i) => ({
         ...j,
         improved_description:
@@ -227,7 +222,6 @@ export function ReportPage() {
       }));
       setJobs(updated);
 
-      // Save improved descriptions to DB
       for (let i = 0; i < updated.length; i++) {
         const job = updated[i]!;
         if (data.improved_descriptions[i]) {
@@ -240,7 +234,6 @@ export function ReportPage() {
     } catch (err) {
       const msg = (err as Error).message;
       setAiError(msg);
-      // Fallback: use original descriptions
       setSummary(
         `Durante ${formatMonthLabel(month)} se completaron ${jobsWithMedia.length} trabajo${jobsWithMedia.length !== 1 ? "s" : ""} de mantenimiento en ${bld.name}.`
       );
@@ -274,10 +267,8 @@ export function ReportPage() {
     setSendError(null);
 
     try {
-      // 1. Generate PDF
       const pdfBlob = await generatePdfFromElement(reportRef.current);
 
-      // 2. Upload PDF to storage
       const pdfPath = `reports/${building.id}/${month}.pdf`;
       await supabase.storage.from("media").remove([pdfPath]);
       const { error: uploadErr } = await supabase.storage
@@ -291,7 +282,6 @@ export function ReportPage() {
         .getPublicUrl(pdfPath);
       const pdfUrl = urlData.publicUrl;
 
-      // 3. Save report to DB
       const reportText = JSON.stringify({
         summary,
         closing,
@@ -317,7 +307,6 @@ export function ReportPage() {
         });
       }
 
-      // 4. Send email via edge function
       const { error: sendErr } = await supabase.functions.invoke(
         "send-report",
         {
@@ -332,7 +321,6 @@ export function ReportPage() {
       );
 
       if (sendErr) {
-        // Email failed but report is saved — mark as draft
         console.error("Email send failed:", sendErr);
       }
 
@@ -356,75 +344,93 @@ export function ReportPage() {
 
   if (!building && step !== "loading") {
     return (
-      <p className="text-sm text-muted-foreground">
-        Edificio no encontrado.
-      </p>
-    );
-  }
-
-  // ── Loading ──
-  if (step === "loading") {
-    return (
-      <div className="flex flex-col items-center gap-4 py-20">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">
-          Generando reporte con IA...
-        </p>
-      </div>
-    );
-  }
-
-  // ── Sent confirmation ──
-  if (step === "sent") {
-    return (
-      <div className="flex flex-col items-center gap-4 py-20">
-        <CheckCircle2 className="size-12 text-green-600" />
-        <h2 className="text-xl font-bold">Reporte enviado</h2>
-        <p className="text-sm text-muted-foreground">
-          El informe fue enviado a {recipients.length} destinatario
-          {recipients.length !== 1 ? "s" : ""}.
-        </p>
-        <Link to={`/buildings/${id}`}>
-          <Button variant="outline">Volver al edificio</Button>
+      <div className="py-20 text-center">
+        <p className="text-sm text-slate-500">Edificio no encontrado.</p>
+        <Link to="/dashboard" className="mt-2 inline-block text-sm text-amber-600 hover:text-amber-500">
+          Volver al dashboard
         </Link>
       </div>
     );
   }
 
-  // ── Email confirmation ──
+  // -- Loading --
+  if (step === "loading") {
+    return (
+      <div className="flex flex-col items-center gap-4 py-24">
+        <div className="flex size-16 items-center justify-center rounded-2xl bg-amber-50">
+          <Loader2 className="size-8 animate-spin text-amber-500" />
+        </div>
+        <div className="text-center">
+          <p className="text-base font-semibold text-slate-800">Generando reporte</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Estamos usando IA para mejorar las descripciones...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // -- Sent confirmation --
+  if (step === "sent") {
+    return (
+      <div className="flex flex-col items-center gap-5 py-24">
+        <div className="flex size-16 items-center justify-center rounded-2xl bg-emerald-50">
+          <CheckCircle2 className="size-8 text-emerald-500" />
+        </div>
+        <div className="text-center">
+          <h2 className="text-2xl text-slate-900" style={serif}>
+            Reporte enviado
+          </h2>
+          <p className="mt-2 text-sm text-slate-500">
+            El informe fue enviado a {recipients.length} destinatario
+            {recipients.length !== 1 ? "s" : ""}.
+          </p>
+        </div>
+        <Link to={`/buildings/${id}`}>
+          <Button variant="outline" className="rounded-xl">Volver al edificio</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  // -- Email confirmation --
   if (step === "confirm" || step === "sending") {
     return (
       <div className="mx-auto max-w-lg space-y-6">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setStep("preview")}
-            className="flex size-8 items-center justify-center rounded-lg hover:bg-muted"
+            className="flex size-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
           >
-            <ArrowLeft className="size-4" />
+            <ArrowLeft className="size-5" />
           </button>
-          <h2 className="text-xl font-bold tracking-tight">Enviar reporte</h2>
+          <h2 className="text-2xl text-slate-900" style={serif}>
+            Enviar reporte
+          </h2>
         </div>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Asunto</label>
+        <div className="space-y-5">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-700">Asunto</label>
             <Input
               value={emailSubject}
               onChange={(e) => setEmailSubject(e.target.value)}
+              className="h-10 rounded-xl"
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Mensaje</label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-700">Mensaje</label>
             <Textarea
               value={emailMessage}
               onChange={(e) => setEmailMessage(e.target.value)}
               rows={5}
+              className="rounded-xl"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Destinatarios</label>
+            <label className="text-sm font-medium text-slate-700">Destinatarios</label>
             <div className="flex gap-2">
               <Input
                 type="email"
@@ -437,26 +443,31 @@ export function ReportPage() {
                     addRecipient();
                   }
                 }}
+                className="h-10 rounded-xl"
               />
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={addRecipient}
+                className="h-10 rounded-xl"
               >
                 <Plus className="size-4" />
               </Button>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               {recipients.map((email) => (
                 <div
                   key={email}
-                  className="flex items-center justify-between rounded-lg border px-3 py-1.5"
+                  className="flex items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-2.5 shadow-sm"
                 >
-                  <span className="text-sm">{email}</span>
+                  <div className="flex items-center gap-2">
+                    <Mail className="size-4 text-slate-400" />
+                    <span className="text-sm text-slate-700">{email}</span>
+                  </div>
                   <button
                     onClick={() => removeRecipient(email)}
-                    className="text-muted-foreground hover:text-destructive"
+                    className="flex size-7 items-center justify-center rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500"
                   >
                     <Trash2 className="size-3.5" />
                   </button>
@@ -466,15 +477,16 @@ export function ReportPage() {
           </div>
 
           {sendError && (
-            <p className="text-sm text-destructive">{sendError}</p>
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+              <p className="text-sm text-red-600">{sendError}</p>
+            </div>
           )}
 
-          <div className="flex gap-2 pt-2">
+          <div className="flex gap-3 pt-2">
             <Button
               onClick={handleSend}
-              disabled={
-                step === "sending" || recipients.length === 0
-              }
+              disabled={step === "sending" || recipients.length === 0}
+              className="h-11 rounded-xl bg-amber-500 px-6 text-[#0b1120] hover:bg-amber-400"
             >
               {step === "sending" ? (
                 <>
@@ -488,7 +500,7 @@ export function ReportPage() {
                 </>
               )}
             </Button>
-            <Button variant="ghost" onClick={() => setStep("preview")}>
+            <Button variant="ghost" onClick={() => setStep("preview")} className="rounded-xl">
               Volver al preview
             </Button>
           </div>
@@ -497,18 +509,18 @@ export function ReportPage() {
     );
   }
 
-  // ── Preview ──
+  // -- Preview --
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Link
             to={`/buildings/${id}`}
-            className="flex size-8 items-center justify-center rounded-lg hover:bg-muted"
+            className="flex size-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
           >
-            <ArrowLeft className="size-4" />
+            <ArrowLeft className="size-5" />
           </Link>
-          <h2 className="text-xl font-bold tracking-tight">
+          <h2 className="text-2xl text-slate-900" style={serif}>
             Preview del reporte
           </h2>
         </div>
@@ -516,7 +528,10 @@ export function ReportPage() {
           {existingReport?.status === "sent" && (
             <Badge>Enviado</Badge>
           )}
-          <Button onClick={handleContinue}>
+          <Button
+            onClick={handleContinue}
+            className="h-10 rounded-xl bg-amber-500 px-5 text-[#0b1120] hover:bg-amber-400"
+          >
             Continuar
             <Send className="ml-1 size-4" />
           </Button>
@@ -524,43 +539,46 @@ export function ReportPage() {
       </div>
 
       {aiError && (
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-          <p className="text-sm text-yellow-800">
-            No se pudo generar el texto con IA: {aiError}
-          </p>
-          <p className="text-xs text-yellow-600 mt-1">
-            Se usaron las descripciones originales. Podés editarlas manualmente.
-          </p>
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <AlertTriangle className="size-5 shrink-0 text-amber-500 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800">
+              No se pudo generar el texto con IA
+            </p>
+            <p className="mt-0.5 text-xs text-amber-600">
+              Se usaron las descripciones originales. Podés editarlas manualmente haciendo click en el texto.
+            </p>
+          </div>
         </div>
       )}
 
-      {/* ── Report preview (this div gets captured as PDF) ── */}
+      {/* Report preview (this div gets captured as PDF) */}
       <div
         ref={reportRef}
-        className="mx-auto max-w-2xl rounded-xl border bg-white p-8 shadow-sm"
+        className="mx-auto max-w-2xl rounded-xl border border-slate-200 bg-white p-6 shadow-lg sm:p-8"
         style={{ fontFamily: "Georgia, serif" }}
       >
         {/* Header */}
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold" style={{ fontFamily: "Georgia, serif" }}>
+          <h1 className="text-2xl font-bold text-slate-900" style={{ fontFamily: "Georgia, serif" }}>
             Informe de Gestión Mensual
           </h1>
-          <p className="mt-2 text-lg text-gray-600">{building?.name}</p>
-          <p className="text-sm text-gray-500">{building?.address}</p>
-          <p className="mt-1 text-sm text-gray-500 capitalize">
+          <p className="mt-2 text-lg text-slate-600">{building?.name}</p>
+          <p className="text-sm text-slate-500">{building?.address}</p>
+          <p className="mt-1 text-sm text-slate-500 capitalize">
             {formatMonthLabel(month)}
           </p>
         </div>
 
-        <hr className="my-6 border-gray-200" />
+        <hr className="my-6 border-slate-200" />
 
         {/* Summary */}
         <div className="mb-6">
-          <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-gray-500">
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-slate-500">
             Resumen
           </h2>
           <div
-            className="text-sm leading-relaxed text-gray-800"
+            className="text-sm leading-relaxed text-slate-800 rounded-lg transition-colors hover:bg-amber-50/50 px-2 py-1 -mx-2"
             contentEditable
             suppressContentEditableWarning
             onBlur={(e) => setSummary(e.currentTarget.textContent ?? "")}
@@ -570,16 +588,16 @@ export function ReportPage() {
           </div>
         </div>
 
-        <hr className="my-6 border-gray-200" />
+        <hr className="my-6 border-slate-200" />
 
         {/* Jobs */}
         <div className="mb-6">
-          <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-gray-500">
+          <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-500">
             Trabajos realizados
           </h2>
 
           {jobs.length === 0 ? (
-            <p className="text-sm text-gray-500 italic">
+            <p className="text-sm text-slate-500 italic">
               No se completaron trabajos durante este período.
             </p>
           ) : (
@@ -587,12 +605,12 @@ export function ReportPage() {
               {jobs.map((job, i) => (
                 <div key={job.id} className="space-y-3">
                   <div className="flex items-start gap-3">
-                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
+                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">
                       {i + 1}
                     </span>
                     <div className="flex-1">
                       <div
-                        className="text-sm leading-relaxed text-gray-800"
+                        className="text-sm leading-relaxed text-slate-800 rounded-lg transition-colors hover:bg-amber-50/50 px-2 py-1 -mx-2"
                         contentEditable
                         suppressContentEditableWarning
                         onBlur={(e) =>
@@ -605,7 +623,7 @@ export function ReportPage() {
                       >
                         {job.improved_description}
                       </div>
-                      <p className="mt-1 text-xs text-gray-400">
+                      <p className="mt-1 text-xs text-slate-400 px-2 -mx-2">
                         Completado: {formatDate(job.completed_at!)}
                       </p>
                     </div>
@@ -618,13 +636,13 @@ export function ReportPage() {
                         .filter((m) => m.type === "before")
                         .map((m) => (
                           <div key={m.id}>
-                            <p className="mb-1 text-[10px] font-medium uppercase text-gray-400">
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                               Antes
                             </p>
                             <img
                               src={m.url}
                               alt="Antes"
-                              className="w-full rounded border object-cover"
+                              className="w-full rounded-lg border border-slate-200 object-cover"
                               crossOrigin="anonymous"
                             />
                           </div>
@@ -633,13 +651,13 @@ export function ReportPage() {
                         .filter((m) => m.type === "after")
                         .map((m) => (
                           <div key={m.id}>
-                            <p className="mb-1 text-[10px] font-medium uppercase text-gray-400">
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                               Después
                             </p>
                             <img
                               src={m.url}
                               alt="Después"
-                              className="w-full rounded border object-cover"
+                              className="w-full rounded-lg border border-slate-200 object-cover"
                               crossOrigin="anonymous"
                             />
                           </div>
@@ -648,7 +666,7 @@ export function ReportPage() {
                   )}
 
                   {i < jobs.length - 1 && (
-                    <hr className="border-gray-100" />
+                    <hr className="border-slate-100" />
                   )}
                 </div>
               ))}
@@ -656,12 +674,12 @@ export function ReportPage() {
           )}
         </div>
 
-        <hr className="my-6 border-gray-200" />
+        <hr className="my-6 border-slate-200" />
 
         {/* Closing */}
         <div>
           <div
-            className="text-sm leading-relaxed text-gray-800"
+            className="text-sm leading-relaxed text-slate-800 rounded-lg transition-colors hover:bg-amber-50/50 px-2 py-1 -mx-2"
             contentEditable
             suppressContentEditableWarning
             onBlur={(e) => setClosing(e.currentTarget.textContent ?? "")}
@@ -672,15 +690,15 @@ export function ReportPage() {
         </div>
 
         {/* Footer */}
-        <div className="mt-8 border-t border-gray-200 pt-4">
-          <p className="text-center text-[10px] text-gray-400">
+        <div className="mt-8 border-t border-slate-200 pt-4">
+          <p className="text-center text-[10px] text-slate-400">
             Generado por Consorcia — {new Date().toLocaleDateString("es-AR")}
           </p>
         </div>
       </div>
 
-      <p className="text-center text-xs text-muted-foreground">
-        Hacé click en cualquier texto para editarlo antes de enviar.
+      <p className="text-center text-xs text-slate-400">
+        Hacé click en cualquier texto del reporte para editarlo antes de enviar.
       </p>
     </div>
   );

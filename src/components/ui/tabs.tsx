@@ -32,7 +32,7 @@ function Tabs({
 
   return (
     <TabsContext.Provider value={{ value, onValueChange: setValue }}>
-      <div data-slot="tabs" className={cn("flex flex-col gap-2", className)}>
+      <div data-slot="tabs" className={cn("flex flex-col gap-3", className)}>
         {children}
       </div>
     </TabsContext.Provider>
@@ -51,7 +51,7 @@ function TabsList({
       data-slot="tabs-list"
       role="tablist"
       className={cn(
-        "inline-flex h-9 w-fit items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+        "inline-flex h-10 w-fit items-center justify-center rounded-xl bg-slate-100 p-1 text-slate-500",
         className
       )}
     >
@@ -79,10 +79,10 @@ function TabsTrigger({
       aria-selected={isActive}
       data-state={isActive ? "active" : "inactive"}
       className={cn(
-        "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "inline-flex items-center justify-center whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30",
         isActive
-          ? "bg-background text-foreground shadow-sm"
-          : "hover:text-foreground",
+          ? "bg-white text-slate-900 shadow-sm"
+          : "hover:text-slate-700",
         className
       )}
       onClick={() => ctx.onValueChange(value)}

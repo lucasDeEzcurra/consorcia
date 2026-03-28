@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import type { Building, Job, Media, Report } from "@/types/database";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,8 +15,15 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
+  Loader2,
+  ClipboardList,
+  CheckCircle2,
+  Clock,
+  Send,
+  Users,
 } from "lucide-react";
 
+const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 const PAGE_SIZE = 20;
 
 function currentMonth() {
@@ -39,10 +45,22 @@ function formatMonthLabel(month: string) {
   return date.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
 }
 
+type TabId = "pending" | "completed" | "history" | "reports" | "recipients" | "generate";
+
+const tabs: { id: TabId; label: string; icon: typeof ClipboardList }[] = [
+  { id: "pending", label: "Pendientes", icon: ClipboardList },
+  { id: "completed", label: "Completados", icon: CheckCircle2 },
+  { id: "history", label: "Historial", icon: Clock },
+  { id: "reports", label: "Reportes", icon: FileText },
+  { id: "recipients", label: "Destinatarios", icon: Users },
+  { id: "generate", label: "Generar", icon: Send },
+];
+
 export function BuildingPage() {
   const { id } = useParams<{ id: string }>();
   const [building, setBuilding] = useState<Building | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabId>("pending");
 
   // Jobs
   const [pendingJobs, setPendingJobs] = useState<Job[]>([]);
@@ -162,7 +180,6 @@ export function BuildingPage() {
     fetchPending();
     fetchCompleted();
     fetchHistory(historyPage);
-    // Re-fetch selected job if still open
     if (selectedJob) {
       supabase
         .from("jobs")
@@ -181,7 +198,6 @@ export function BuildingPage() {
                 setSelectedJobMedia((mediaData as Media[]) ?? []);
               });
           } else {
-            // Job was deleted
             setDialogOpen(false);
             setSelectedJob(null);
           }
@@ -210,14 +226,11 @@ export function BuildingPage() {
   const generateReport = async () => {
     if (!building) return;
     const month = currentMonth();
-
-    // Check if report already exists
     const existing = reports.find((r) => r.month === month);
     if (existing) return;
 
     setGeneratingReport(true);
 
-    // Get completed jobs for this month
     const monthStart = `${month}-01T00:00:00.000Z`;
     const [y, m] = month.split("-");
     const nextMonth = new Date(Number(y), Number(m), 1).toISOString();
@@ -250,11 +263,23 @@ export function BuildingPage() {
   };
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Cargando...</p>;
+    return (
+      <div className="flex items-center gap-3 py-20 justify-center">
+        <Loader2 className="size-5 animate-spin text-amber-500" />
+        <span className="text-sm text-slate-500">Cargando...</span>
+      </div>
+    );
   }
 
   if (!building) {
-    return <p className="text-sm text-muted-foreground">Edificio no encontrado.</p>;
+    return (
+      <div className="py-20 text-center">
+        <p className="text-sm text-slate-500">Edificio no encontrado.</p>
+        <Link to="/dashboard" className="mt-2 inline-block text-sm text-amber-600 hover:text-amber-500">
+          Volver al dashboard
+        </Link>
+      </div>
+    );
   }
 
   const month = currentMonth();
@@ -266,134 +291,179 @@ export function BuildingPage() {
       <div className="flex items-center gap-3">
         <Link
           to="/dashboard"
-          className="flex size-8 items-center justify-center rounded-lg hover:bg-muted"
+          className="flex size-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
         >
-          <ArrowLeft className="size-4" />
+          <ArrowLeft className="size-5" />
         </Link>
         <div>
-          <h2 className="text-xl font-bold tracking-tight">{building.name}</h2>
-          <p className="text-sm text-muted-foreground">{building.address}</p>
+          <h1 className="text-2xl text-slate-900 sm:text-3xl" style={serif}>
+            {building.name}
+          </h1>
+          <p className="text-sm text-slate-400">{building.address}</p>
         </div>
       </div>
 
-      <Tabs defaultValue="pending">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="pending">
-            Pendientes
-            {pendingJobs.length > 0 && (
-              <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">
-                {pendingJobs.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="completed">Completados</TabsTrigger>
-          <TabsTrigger value="history">Historial</TabsTrigger>
-          <TabsTrigger value="reports">Reportes</TabsTrigger>
-          <TabsTrigger value="recipients">Destinatarios</TabsTrigger>
-          <TabsTrigger value="generate">Generar Reporte</TabsTrigger>
-        </TabsList>
+      {/* Tab navigation - scrollable on mobile */}
+      <div className="-mx-4 sm:mx-0">
+        <div className="flex gap-1 overflow-x-auto px-4 pb-2 sm:flex-wrap sm:px-0 sm:pb-0">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            const count = tab.id === "pending" ? pendingJobs.length : undefined;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-all ${
+                  isActive
+                    ? "bg-amber-500 text-[#0b1120] shadow-sm"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                }`}
+              >
+                <tab.icon className="size-4" />
+                <span>{tab.label}</span>
+                {count !== undefined && count > 0 && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                      isActive
+                        ? "bg-[#0b1120]/20 text-[#0b1120]"
+                        : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
+      {/* Tab content */}
+      <div>
         {/* Pending Jobs */}
-        <TabsContent value="pending">
-          <CreateJobForm
-            buildingId={building.id}
-            onCreated={() => {
-              fetchPending();
-              fetchHistory(historyPage);
-            }}
-          />
-          <JobList
-            jobs={pendingJobs}
-            emptyMessage="No hay trabajos pendientes."
-            onSelect={openJobDetail}
-          />
-        </TabsContent>
+        {activeTab === "pending" && (
+          <div>
+            <CreateJobForm
+              buildingId={building.id}
+              onCreated={() => {
+                fetchPending();
+                fetchHistory(historyPage);
+              }}
+            />
+            <JobList
+              jobs={pendingJobs}
+              emptyMessage="No hay trabajos pendientes"
+              emptyDescription="Creá un nuevo trabajo usando el botón de arriba."
+              emptyIcon={ClipboardList}
+              onSelect={openJobDetail}
+            />
+          </div>
+        )}
 
         {/* Completed Jobs (this month) */}
-        <TabsContent value="completed">
-          <p className="mb-3 text-xs text-muted-foreground">
-            Completados en {formatMonthLabel(currentMonth())}
-          </p>
-          <JobList
-            jobs={completedJobs}
-            emptyMessage="No hay trabajos completados este mes."
-            onSelect={openJobDetail}
-            showCompletedDate
-          />
-        </TabsContent>
+        {activeTab === "completed" && (
+          <div>
+            <p className="mb-4 text-xs text-slate-400">
+              Completados en {formatMonthLabel(currentMonth())}
+            </p>
+            <JobList
+              jobs={completedJobs}
+              emptyMessage="No hay trabajos completados este mes"
+              emptyDescription="Los trabajos completados aparecerán acá."
+              emptyIcon={CheckCircle2}
+              onSelect={openJobDetail}
+              showCompletedDate
+            />
+          </div>
+        )}
 
         {/* History (paginated) */}
-        <TabsContent value="history">
-          <JobList
-            jobs={historyJobs}
-            emptyMessage="No hay trabajos."
-            onSelect={openJobDetail}
-            showCompletedDate
-            showStatus
-          />
-          <div className="mt-4 flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={historyPage === 0}
-              onClick={() => fetchHistory(historyPage - 1)}
-            >
-              <ChevronLeft className="size-4" />
-              Anterior
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              Página {historyPage + 1}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!historyHasMore}
-              onClick={() => fetchHistory(historyPage + 1)}
-            >
-              Siguiente
-              <ChevronRight className="size-4" />
-            </Button>
+        {activeTab === "history" && (
+          <div>
+            <JobList
+              jobs={historyJobs}
+              emptyMessage="No hay trabajos"
+              emptyDescription="El historial de trabajos aparecerá acá."
+              emptyIcon={Clock}
+              onSelect={openJobDetail}
+              showCompletedDate
+              showStatus
+            />
+            {historyJobs.length > 0 && (
+              <div className="mt-4 flex items-center justify-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={historyPage === 0}
+                  onClick={() => fetchHistory(historyPage - 1)}
+                >
+                  <ChevronLeft className="size-4" />
+                  Anterior
+                </Button>
+                <span className="text-xs text-slate-400">
+                  Página {historyPage + 1}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!historyHasMore}
+                  onClick={() => fetchHistory(historyPage + 1)}
+                >
+                  Siguiente
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            )}
           </div>
-        </TabsContent>
+        )}
 
         {/* Reports */}
-        <TabsContent value="reports">
-          {reports.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No hay reportes generados.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {reports.map((report) => (
-                <Link
-                  key={report.id}
-                  to={`/buildings/${building.id}/report?month=${report.month}`}
-                  className="flex items-center justify-between rounded-lg border p-3 hover:bg-accent transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <FileText className="size-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium">
-                        {formatMonthLabel(report.month)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Creado: {formatDate(report.created_at)}
-                      </p>
-                    </div>
-                  </div>
-                  <Badge
-                    variant={report.status === "sent" ? "default" : "outline"}
+        {activeTab === "reports" && (
+          <div>
+            {reports.length === 0 ? (
+              <EmptyState
+                icon={FileText}
+                message="No hay reportes generados"
+                description="Generá un reporte desde la pestaña Generar."
+              />
+            ) : (
+              <div className="space-y-2">
+                {reports.map((report) => (
+                  <Link
+                    key={report.id}
+                    to={`/buildings/${building.id}/report?month=${report.month}`}
+                    className="group flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-sm transition-all hover:border-amber-200 hover:shadow-md"
                   >
-                    {report.status === "sent" ? "Enviado" : "Borrador"}
-                  </Badge>
-                </Link>
-              ))}
-            </div>
-          )}
-        </TabsContent>
+                    <div className="flex items-center gap-3">
+                      <div className="flex size-10 items-center justify-center rounded-xl bg-slate-100 transition-colors group-hover:bg-amber-50">
+                        <FileText className="size-5 text-slate-400 transition-colors group-hover:text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800 capitalize">
+                          {formatMonthLabel(report.month)}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          Creado: {formatDate(report.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={report.status === "sent" ? "default" : "outline"}
+                      >
+                        {report.status === "sent" ? "Enviado" : "Borrador"}
+                      </Badge>
+                      <ChevronRight className="size-4 text-slate-300" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Recipients */}
-        <TabsContent value="recipients">
+        {activeTab === "recipients" && (
           <div className="space-y-4">
             <form onSubmit={addEmail} className="flex gap-2">
               <Input
@@ -402,50 +472,57 @@ export function BuildingPage() {
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 required
+                className="h-11 rounded-xl"
               />
-              <Button type="submit" size="sm">
+              <Button type="submit" className="h-11 shrink-0 rounded-xl bg-amber-500 text-[#0b1120] hover:bg-amber-400">
                 <Plus className="size-4" />
-                Agregar
+                <span className="hidden sm:inline">Agregar</span>
               </Button>
             </form>
 
             {building.emails.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No hay destinatarios configurados.
-              </p>
+              <EmptyState
+                icon={Mail}
+                message="No hay destinatarios"
+                description="Agregá emails para enviar los reportes."
+              />
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-2">
                 {building.emails.map((email) => (
                   <div
                     key={email}
-                    className="flex items-center justify-between rounded-lg border px-3 py-2"
+                    className="flex items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-3 shadow-sm"
                   >
-                    <div className="flex items-center gap-2">
-                      <Mail className="size-4 text-muted-foreground" />
-                      <span className="text-sm">{email}</span>
+                    <div className="flex items-center gap-3">
+                      <div className="flex size-8 items-center justify-center rounded-lg bg-slate-100">
+                        <Mail className="size-4 text-slate-400" />
+                      </div>
+                      <span className="text-sm text-slate-700">{email}</span>
                     </div>
                     <button
                       onClick={() => removeEmail(email)}
-                      className="text-muted-foreground hover:text-destructive"
+                      className="flex size-8 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-red-50 hover:text-red-500"
                     >
-                      <Trash2 className="size-3.5" />
+                      <Trash2 className="size-4" />
                     </button>
                   </div>
                 ))}
               </div>
             )}
           </div>
-        </TabsContent>
+        )}
 
         {/* Generate Report */}
-        <TabsContent value="generate">
-          <div className="flex flex-col items-center gap-4 py-8">
-            <FileText className="size-12 text-muted-foreground" />
+        {activeTab === "generate" && (
+          <div className="flex flex-col items-center gap-5 rounded-xl border border-slate-100 bg-white py-12 px-6 shadow-sm">
+            <div className="flex size-16 items-center justify-center rounded-2xl bg-amber-50">
+              <FileText className="size-8 text-amber-500" />
+            </div>
             <div className="text-center">
-              <p className="font-medium">
+              <p className="text-lg font-semibold text-slate-800" style={serif}>
                 Reporte de {formatMonthLabel(currentMonth())}
               </p>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-sm text-slate-500">
                 {completedJobs.length} trabajo
                 {completedJobs.length !== 1 ? "s" : ""} completado
                 {completedJobs.length !== 1 ? "s" : ""} este mes
@@ -454,28 +531,36 @@ export function BuildingPage() {
 
             {hasReportThisMonth ? (
               <div className="text-center">
-                <Badge variant="outline">Ya generado</Badge>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Podés verlo en la pestaña Reportes
+                <Badge variant="outline" className="mb-2">Ya generado</Badge>
+                <p className="text-xs text-slate-400">
+                  Podés verlo en la pestaña Reportes.
                 </p>
               </div>
             ) : (
               <Button
                 onClick={generateReport}
                 disabled={generatingReport || completedJobs.length === 0}
+                className="h-11 rounded-xl bg-amber-500 px-6 text-[#0b1120] hover:bg-amber-400"
               >
-                {generatingReport ? "Generando..." : "Generar Reporte"}
+                {generatingReport ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Generando...
+                  </>
+                ) : (
+                  "Generar Reporte"
+                )}
               </Button>
             )}
 
             {completedJobs.length === 0 && !hasReportThisMonth && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-slate-400">
                 No hay trabajos completados para generar un reporte.
               </p>
             )}
           </div>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       {/* Job Detail Dialog */}
       <JobDetailDialog
@@ -492,25 +577,50 @@ export function BuildingPage() {
   );
 }
 
-/* ── Job List helper ── */
+/* -- Empty state helper -- */
+function EmptyState({
+  icon: Icon,
+  message,
+  description,
+}: {
+  icon: typeof ClipboardList;
+  message: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-xl border border-dashed border-slate-200 py-14 text-center">
+      <Icon className="mx-auto size-10 text-slate-300" />
+      <p className="mt-3 text-sm font-medium text-slate-500">{message}</p>
+      <p className="mt-1 text-xs text-slate-400">{description}</p>
+    </div>
+  );
+}
+
+/* -- Job List helper -- */
 function JobList({
   jobs,
   emptyMessage,
+  emptyDescription,
+  emptyIcon,
   onSelect,
   showCompletedDate,
   showStatus,
 }: {
   jobs: Job[];
   emptyMessage: string;
+  emptyDescription: string;
+  emptyIcon: typeof ClipboardList;
   onSelect: (job: Job) => void;
   showCompletedDate?: boolean;
   showStatus?: boolean;
 }) {
   if (jobs.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        {emptyMessage}
-      </p>
+      <EmptyState
+        icon={emptyIcon}
+        message={emptyMessage}
+        description={emptyDescription}
+      />
     );
   }
 
@@ -520,13 +630,13 @@ function JobList({
         <button
           key={job.id}
           onClick={() => onSelect(job)}
-          className="flex w-full items-center justify-between rounded-lg border p-3 text-left transition-colors hover:bg-accent"
+          className="group flex w-full items-center justify-between rounded-xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-all hover:border-amber-200 hover:shadow-md"
         >
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">
+            <p className="truncate text-sm font-medium text-slate-800">
               {job.description_original}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="mt-0.5 text-xs text-slate-400">
               {showCompletedDate && job.completed_at
                 ? `Completado: ${formatDate(job.completed_at)}`
                 : `Creado: ${formatDate(job.created_at)}`}
@@ -543,6 +653,7 @@ function JobList({
                 {job.status === "pending" ? "Pendiente" : "Completado"}
               </Badge>
             )}
+            <ChevronRight className="size-4 text-slate-300 transition-colors group-hover:text-amber-500" />
           </div>
         </button>
       ))}

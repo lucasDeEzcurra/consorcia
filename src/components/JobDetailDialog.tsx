@@ -20,6 +20,9 @@ import {
   ImagePlus,
   CheckCircle2,
   X,
+  Loader2,
+  AlertTriangle,
+  Camera,
 } from "lucide-react";
 
 interface Props {
@@ -66,7 +69,7 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
     setCompletePreviews([]);
   };
 
-  // ── Description edit ──
+  // -- Description edit --
   const startEditDescription = () => {
     setDescription(job.description_original);
     setEditMode("description");
@@ -84,7 +87,7 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
     onUpdated();
   };
 
-  // ── Expense edit ──
+  // -- Expense edit --
   const startEditExpense = () => {
     setExpenseAmount(job.expense_amount?.toString() ?? "");
     setExpenseProvider(job.expense_provider ?? "");
@@ -108,7 +111,7 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
     onUpdated();
   };
 
-  // ── Photo upload (inline add) ──
+  // -- Photo upload (inline add) --
   const handlePhotoUpload = async (
     files: FileList | null,
     type: "before" | "after"
@@ -121,14 +124,14 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
     onUpdated();
   };
 
-  // ── Photo delete ──
+  // -- Photo delete --
   const deletePhoto = async (mediaId: string, url: string) => {
     await deleteMediaFile(url);
     await supabase.from("media").delete().eq("id", mediaId);
     onUpdated();
   };
 
-  // ── Complete flow ──
+  // -- Complete flow --
   const startComplete = () => {
     resetCompleteFlow();
     setEditMode("complete");
@@ -153,13 +156,11 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
   const confirmComplete = async () => {
     setSaving(true);
 
-    // Upload after photos
     if (completeFiles.length > 0) {
       const urls = await uploadJobPhotos(job.id, completeFiles, "after");
       await insertMediaRecords(job.id, urls, "after");
     }
 
-    // Mark as completed
     await supabase
       .from("jobs")
       .update({
@@ -174,10 +175,9 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
     onUpdated();
   };
 
-  // ── Delete ──
+  // -- Delete --
   const handleDelete = async () => {
     setDeleting(true);
-    // Delete media files from storage
     for (const m of media) {
       await deleteMediaFile(m.url);
     }
@@ -209,13 +209,15 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
 
         {/* Complete flow banner */}
         {editMode === "complete" && (
-          <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
-            <p className="text-sm font-medium">Completar trabajo</p>
-            <p className="text-xs text-muted-foreground">
+          <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="size-5 text-emerald-600" />
+              <p className="text-sm font-semibold text-emerald-800">Completar trabajo</p>
+            </div>
+            <p className="text-xs text-emerald-600">
               Subí las fotos del trabajo terminado (después) y confirmá.
             </p>
 
-            {/* Preview of selected after photos */}
             {completePreviews.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {completePreviews.map((src, i) => (
@@ -223,12 +225,12 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
                     <img
                       src={src}
                       alt={`After ${i + 1}`}
-                      className="size-full rounded-md border object-cover"
+                      className="size-full rounded-lg border border-emerald-200 object-cover"
                     />
                     <button
                       type="button"
                       onClick={() => removeCompleteFile(i)}
-                      className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-destructive text-white"
+                      className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-red-500 text-white shadow-sm"
                     >
                       <X className="size-3" />
                     </button>
@@ -237,8 +239,8 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
               </div>
             )}
 
-            <div className="flex items-center gap-2">
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-medium text-emerald-700 shadow-sm transition-colors hover:bg-emerald-50">
                 <ImagePlus className="size-3.5" />
                 Agregar fotos
                 <input
@@ -254,8 +256,16 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
                 size="sm"
                 onClick={confirmComplete}
                 disabled={saving}
+                className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-500"
               >
-                {saving ? "Completando..." : "Confirmar completado"}
+                {saving ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Completando...
+                  </>
+                ) : (
+                  "Confirmar completado"
+                )}
               </Button>
               <Button
                 size="sm"
@@ -264,6 +274,7 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
                   setEditMode(null);
                   resetCompleteFlow();
                 }}
+                className="rounded-xl"
               >
                 Cancelar
               </Button>
@@ -271,13 +282,13 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
           </div>
         )}
 
-        {/* Mark as complete button (only for pending, when not already in complete mode) */}
+        {/* Mark as complete button */}
         {job.status === "pending" && editMode !== "complete" && (
           <Button
             variant="outline"
             size="sm"
             onClick={startComplete}
-            className="w-fit"
+            className="w-fit rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50"
           >
             <CheckCircle2 className="size-4" />
             Marcar como completado
@@ -285,15 +296,15 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
         )}
 
         {/* Description */}
-        <div className="space-y-1">
+        <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
               Descripción
             </p>
             {editMode !== "description" && (
               <button
                 onClick={startEditDescription}
-                className="text-muted-foreground hover:text-foreground"
+                className="flex size-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
                 <Pencil className="size-3.5" />
               </button>
@@ -305,9 +316,10 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
+                className="rounded-xl"
               />
               <div className="flex gap-2">
-                <Button size="sm" type="submit" disabled={saving}>
+                <Button size="sm" type="submit" disabled={saving} className="rounded-xl bg-amber-500 text-[#0b1120] hover:bg-amber-400">
                   {saving ? "Guardando..." : "Guardar"}
                 </Button>
                 <Button
@@ -315,18 +327,19 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
                   variant="ghost"
                   type="button"
                   onClick={() => setEditMode(null)}
+                  className="rounded-xl"
                 >
                   Cancelar
                 </Button>
               </div>
             </form>
           ) : (
-            <p className="text-sm">{job.description_original}</p>
+            <p className="text-sm text-slate-700 leading-relaxed">{job.description_original}</p>
           )}
         </div>
 
         {/* Dates */}
-        <div className="flex gap-6 text-xs text-muted-foreground">
+        <div className="flex flex-wrap gap-4 text-xs text-slate-400">
           <span>Creado: {formatDate(job.created_at)}</span>
           {job.completed_at && (
             <span>Completado: {formatDate(job.completed_at)}</span>
@@ -352,19 +365,22 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
         </div>
 
         {uploading && (
-          <p className="text-xs text-muted-foreground">Subiendo fotos...</p>
+          <div className="flex items-center gap-2 text-xs text-amber-600">
+            <Loader2 className="size-3.5 animate-spin" />
+            Subiendo fotos...
+          </div>
         )}
 
         {/* Expense */}
-        <div className="space-y-1">
+        <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
               Gasto
             </p>
             {editMode !== "expense" && (
               <button
                 onClick={startEditExpense}
-                className="text-muted-foreground hover:text-foreground"
+                className="flex size-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
                 <DollarSign className="size-3.5" />
               </button>
@@ -372,27 +388,30 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
           </div>
           {editMode === "expense" ? (
             <form onSubmit={saveExpense} className="space-y-2">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Input
                   type="number"
                   step="0.01"
                   placeholder="Monto"
                   value={expenseAmount}
                   onChange={(e) => setExpenseAmount(e.target.value)}
+                  className="h-9 rounded-xl"
                 />
                 <Input
                   placeholder="Proveedor"
                   value={expenseProvider}
                   onChange={(e) => setExpenseProvider(e.target.value)}
+                  className="h-9 rounded-xl"
                 />
                 <Input
                   placeholder="Categoría"
                   value={expenseCategory}
                   onChange={(e) => setExpenseCategory(e.target.value)}
+                  className="h-9 rounded-xl"
                 />
               </div>
               <div className="flex gap-2">
-                <Button size="sm" type="submit" disabled={saving}>
+                <Button size="sm" type="submit" disabled={saving} className="rounded-xl bg-amber-500 text-[#0b1120] hover:bg-amber-400">
                   {saving ? "Guardando..." : "Guardar"}
                 </Button>
                 <Button
@@ -400,35 +419,40 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
                   variant="ghost"
                   type="button"
                   onClick={() => setEditMode(null)}
+                  className="rounded-xl"
                 >
                   Cancelar
                 </Button>
               </div>
             </form>
           ) : job.expense_amount ? (
-            <p className="text-sm">
+            <p className="text-sm text-slate-700">
               ${job.expense_amount}
               {job.expense_provider && ` — ${job.expense_provider}`}
               {job.expense_category && ` (${job.expense_category})`}
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">Sin gasto cargado</p>
+            <p className="text-xs text-slate-400">Sin gasto cargado</p>
           )}
         </div>
 
         {/* Delete */}
         <DialogFooter>
           {confirmDelete ? (
-            <div className="flex w-full items-center justify-between">
-              <p className="text-sm text-destructive">
-                ¿Seguro que querés eliminar este trabajo?
-              </p>
+            <div className="flex w-full flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="size-4 shrink-0 text-red-500 mt-0.5" />
+                <p className="text-sm text-red-700">
+                  ¿Seguro que querés eliminar este trabajo?
+                </p>
+              </div>
               <div className="flex gap-2">
                 <Button
                   variant="destructive"
                   size="sm"
                   onClick={handleDelete}
                   disabled={deleting}
+                  className="rounded-xl"
                 >
                   {deleting ? "Eliminando..." : "Sí, eliminar"}
                 </Button>
@@ -436,6 +460,7 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
                   variant="ghost"
                   size="sm"
                   onClick={() => setConfirmDelete(false)}
+                  className="rounded-xl"
                 >
                   No
                 </Button>
@@ -446,6 +471,7 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
               variant="destructive"
               size="sm"
               onClick={() => setConfirmDelete(true)}
+              className="rounded-xl"
             >
               <Trash2 className="size-3.5" />
               Eliminar trabajo
@@ -457,7 +483,7 @@ export function JobDetailDialog({ job, media, open, onClose, onUpdated }: Props)
   );
 }
 
-/* ── Photo section helper ── */
+/* -- Photo section helper -- */
 function PhotoSection({
   title,
   photos,
@@ -474,10 +500,10 @@ function PhotoSection({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
           {title}
         </p>
-        <label className="cursor-pointer text-muted-foreground hover:text-foreground">
+        <label className="flex size-7 cursor-pointer items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600">
           <ImagePlus className="size-3.5" />
           <input
             type="file"
@@ -489,21 +515,24 @@ function PhotoSection({
         </label>
       </div>
       {photos.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Sin fotos</p>
+        <div className="flex flex-col items-center gap-1 rounded-xl border border-dashed border-slate-200 py-6">
+          <Camera className="size-5 text-slate-300" />
+          <p className="text-[10px] text-slate-400">Sin fotos</p>
+        </div>
       ) : (
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           {photos.map((m) => (
             <div key={m.id} className="group relative">
               <img
                 src={m.url}
                 alt={title}
-                className="w-full rounded-md border object-cover"
+                className="w-full rounded-xl border border-slate-200 object-cover"
               />
               <button
                 onClick={() => onDelete(m.id, m.url)}
-                className="absolute top-1 right-1 hidden rounded bg-black/60 p-1 text-white group-hover:block"
+                className="absolute top-2 right-2 hidden rounded-lg bg-black/60 p-1.5 text-white backdrop-blur-sm group-hover:block"
               >
-                <Trash2 className="size-3" />
+                <Trash2 className="size-3.5" />
               </button>
             </div>
           ))}

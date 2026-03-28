@@ -11,7 +11,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Users } from "lucide-react";
+import { Plus, Users, ChevronRight, Loader2 } from "lucide-react";
+
+const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
 interface SupervisorWithCount extends Supervisor {
   building_count: number;
@@ -85,18 +87,30 @@ export function SupervisorsPage() {
     fetchSupervisors();
   };
 
-  if (loading) return <p className="text-sm text-muted-foreground">Cargando...</p>;
+  if (loading) {
+    return (
+      <div className="flex items-center gap-3 py-20 justify-center">
+        <Loader2 className="size-5 animate-spin text-amber-500" />
+        <span className="text-sm text-slate-500">Cargando...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-bold tracking-tight">Supervisores</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="text-3xl text-slate-900 sm:text-4xl" style={serif}>
+            Supervisores
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
             Gestión de supervisores del sistema.
           </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
+        <Button
+          onClick={() => setDialogOpen(true)}
+          className="h-10 self-start rounded-xl bg-amber-500 px-5 text-[#0b1120] hover:bg-amber-400 sm:self-auto"
+        >
           <Plus className="size-4" />
           Nuevo supervisor
         </Button>
@@ -107,26 +121,31 @@ export function SupervisorsPage() {
           <Link
             key={s.id}
             to={`/admin/supervisors/${s.id}`}
-            className="flex items-center justify-between rounded-lg border bg-card p-4 transition-colors hover:bg-accent"
+            className="group flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-sm transition-all hover:border-amber-200 hover:shadow-md"
           >
             <div className="flex items-center gap-3">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-muted">
-                <Users className="size-4 text-muted-foreground" />
+              <div className="flex size-10 items-center justify-center rounded-xl bg-slate-100 transition-colors group-hover:bg-amber-50">
+                <Users className="size-5 text-slate-400 transition-colors group-hover:text-amber-600" />
               </div>
               <div>
-                <p className="text-sm font-medium">{s.name}</p>
-                <p className="text-xs text-muted-foreground">{s.phone_number}</p>
+                <p className="text-sm font-semibold text-slate-800">{s.name}</p>
+                <p className="text-xs text-slate-400">{s.phone_number}</p>
               </div>
             </div>
-            <span className="text-xs text-muted-foreground">
-              {s.building_count} edificio{s.building_count !== 1 ? "s" : ""}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">
+                {s.building_count} edificio{s.building_count !== 1 ? "s" : ""}
+              </span>
+              <ChevronRight className="size-4 text-slate-300 transition-colors group-hover:text-amber-500" />
+            </div>
           </Link>
         ))}
         {supervisors.length === 0 && (
-          <p className="text-sm text-muted-foreground py-8 text-center">
-            No hay supervisores. Creá uno para empezar.
-          </p>
+          <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center">
+            <Users className="mx-auto size-10 text-slate-300" />
+            <p className="mt-3 text-sm font-medium text-slate-500">No hay supervisores</p>
+            <p className="mt-1 text-xs text-slate-400">Creá uno para empezar.</p>
+          </div>
         )}
       </div>
 
@@ -136,27 +155,38 @@ export function SupervisorsPage() {
           <DialogHeader>
             <DialogTitle>Nuevo supervisor</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-3">
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Nombre</label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Juan Pérez" />
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Nombre</label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Juan Pérez" className="h-10 rounded-xl" />
             </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Teléfono (WhatsApp)</label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="+5491112345678" />
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Teléfono (WhatsApp)</label>
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="+5491112345678" className="h-10 rounded-xl" />
             </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Email</label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="supervisor@email.com" />
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Email</label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="supervisor@email.com" className="h-10 rounded-xl" />
             </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Contraseña</label>
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Contraseña</label>
+              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} className="h-10 rounded-xl" />
             </div>
-            {createError && <p className="text-sm text-destructive">{createError}</p>}
+            {createError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                <p className="text-sm text-red-600">{createError}</p>
+              </div>
+            )}
             <DialogFooter>
-              <Button type="submit" disabled={creating}>
-                {creating ? "Creando..." : "Crear supervisor"}
+              <Button type="submit" disabled={creating} className="h-10 rounded-xl bg-amber-500 text-[#0b1120] hover:bg-amber-400">
+                {creating ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Creando...
+                  </>
+                ) : (
+                  "Crear supervisor"
+                )}
               </Button>
             </DialogFooter>
           </form>

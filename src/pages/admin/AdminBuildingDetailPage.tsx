@@ -5,7 +5,18 @@ import type { Building, Supervisor, Job, Report } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Save, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Save,
+  Trash2,
+  Loader2,
+  AlertTriangle,
+  ClipboardList,
+  CheckCircle2,
+  FileText,
+} from "lucide-react";
+
+const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString("es-AR", {
@@ -89,38 +100,61 @@ export function AdminBuildingDetailPage() {
     window.location.href = "/admin/buildings";
   };
 
-  if (loading) return <p className="text-sm text-muted-foreground">Cargando...</p>;
-  if (!building) return <p className="text-sm text-muted-foreground">Edificio no encontrado.</p>;
+  if (loading) {
+    return (
+      <div className="flex items-center gap-3 py-20 justify-center">
+        <Loader2 className="size-5 animate-spin text-amber-500" />
+        <span className="text-sm text-slate-500">Cargando...</span>
+      </div>
+    );
+  }
+
+  if (!building) {
+    return (
+      <div className="py-20 text-center">
+        <p className="text-sm text-slate-500">Edificio no encontrado.</p>
+        <Link to="/admin/buildings" className="mt-2 inline-block text-sm text-amber-600 hover:text-amber-500">
+          Volver a edificios
+        </Link>
+      </div>
+    );
+  }
 
   const pendingCount = jobs.filter((j) => j.status === "pending").length;
   const completedCount = jobs.filter((j) => j.status === "completed").length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Header */}
       <div className="flex items-center gap-3">
-        <Link to="/admin/buildings" className="flex size-8 items-center justify-center rounded-lg hover:bg-muted">
-          <ArrowLeft className="size-4" />
+        <Link
+          to="/admin/buildings"
+          className="flex size-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+        >
+          <ArrowLeft className="size-5" />
         </Link>
-        <h2 className="text-xl font-bold tracking-tight">{building.name}</h2>
+        <h1 className="text-2xl text-slate-900 sm:text-3xl" style={serif}>
+          {building.name}
+        </h1>
       </div>
 
       {/* Edit form */}
-      <form onSubmit={handleSave} className="max-w-md space-y-3 rounded-lg border p-4">
-        <p className="text-sm font-medium">Datos del edificio</p>
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Nombre</label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required />
+      <form onSubmit={handleSave} className="max-w-md space-y-4 rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
+        <p className="text-sm font-semibold text-slate-800">Datos del edificio</p>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-slate-500">Nombre</label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} required className="h-10 rounded-xl" />
         </div>
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Dirección</label>
-          <Input value={address} onChange={(e) => setAddress(e.target.value)} required />
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-slate-500">Dirección</label>
+          <Input value={address} onChange={(e) => setAddress(e.target.value)} required className="h-10 rounded-xl" />
         </div>
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Supervisor asignado</label>
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-slate-500">Supervisor asignado</label>
           <select
             value={supervisorId}
             onChange={(e) => setSupervisorId(e.target.value)}
-            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm"
+            className="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm transition-all focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
           >
             <option value="">Sin asignar</option>
             {supervisors.map((s) => (
@@ -128,42 +162,55 @@ export function AdminBuildingDetailPage() {
             ))}
           </select>
         </div>
-        <Button type="submit" size="sm" disabled={saving}>
-          <Save className="size-4" />
-          {saving ? "Guardando..." : "Guardar cambios"}
+        <Button type="submit" size="sm" disabled={saving} className="rounded-xl bg-amber-500 text-[#0b1120] hover:bg-amber-400">
+          {saving ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              Guardando...
+            </>
+          ) : (
+            <>
+              <Save className="size-4" />
+              Guardar cambios
+            </>
+          )}
         </Button>
       </form>
 
       {/* Stats */}
-      <div className="flex gap-4">
-        <div className="rounded-lg border p-3">
-          <p className="text-lg font-bold">{pendingCount}</p>
-          <p className="text-xs text-muted-foreground">Pendientes</p>
-        </div>
-        <div className="rounded-lg border p-3">
-          <p className="text-lg font-bold">{completedCount}</p>
-          <p className="text-xs text-muted-foreground">Completados</p>
-        </div>
-        <div className="rounded-lg border p-3">
-          <p className="text-lg font-bold">{reports.length}</p>
-          <p className="text-xs text-muted-foreground">Reportes</p>
-        </div>
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Pendientes", value: pendingCount, icon: ClipboardList, color: "bg-amber-500" },
+          { label: "Completados", value: completedCount, icon: CheckCircle2, color: "bg-emerald-500" },
+          { label: "Reportes", value: reports.length, icon: FileText, color: "bg-violet-500" },
+        ].map((s) => (
+          <div key={s.label} className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+            <div className={`mb-2 inline-flex size-8 items-center justify-center rounded-lg ${s.color}`}>
+              <s.icon className="size-4 text-white" />
+            </div>
+            <p className="text-xl font-bold text-slate-900">{s.value}</p>
+            <p className="text-xs text-slate-500">{s.label}</p>
+          </div>
+        ))}
       </div>
 
       {/* Recent jobs */}
       <div>
-        <h3 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
+        <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
           Últimos trabajos
-        </h3>
+        </h2>
         {jobs.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">Sin trabajos.</p>
+          <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center">
+            <ClipboardList className="mx-auto size-8 text-slate-300" />
+            <p className="mt-2 text-sm text-slate-500">Sin trabajos.</p>
+          </div>
         ) : (
           <div className="space-y-2">
             {jobs.map((j) => (
-              <div key={j.id} className="flex items-center justify-between rounded-lg border p-3">
-                <div>
-                  <p className="text-sm">{j.description_original}</p>
-                  <p className="text-xs text-muted-foreground">{formatDate(j.created_at)}</p>
+              <div key={j.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-800">{j.description_original}</p>
+                  <p className="text-xs text-slate-400">{formatDate(j.created_at)}</p>
                 </div>
                 <Badge variant={j.status === "pending" ? "outline" : "default"}>
                   {j.status === "pending" ? "Pendiente" : "Completado"}
@@ -177,13 +224,13 @@ export function AdminBuildingDetailPage() {
       {/* Reports */}
       {reports.length > 0 && (
         <div>
-          <h3 className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-wider">
+          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
             Reportes
-          </h3>
+          </h2>
           <div className="space-y-2">
             {reports.map((r) => (
-              <div key={r.id} className="flex items-center justify-between rounded-lg border p-3">
-                <p className="text-sm">{r.month}</p>
+              <div key={r.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                <p className="text-sm font-medium text-slate-800">{r.month}</p>
                 <Badge variant={r.status === "sent" ? "default" : "outline"}>
                   {r.status === "sent" ? "Enviado" : "Borrador"}
                 </Badge>
@@ -194,19 +241,26 @@ export function AdminBuildingDetailPage() {
       )}
 
       {/* Delete */}
-      <div className="border-t pt-6">
+      <div className="border-t border-slate-100 pt-6">
         {confirmDelete ? (
-          <div className="flex items-center gap-3">
-            <p className="text-sm text-destructive">
-              ¿Eliminar {building.name}? Se borrarán todos los trabajos y reportes.
-            </p>
-            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
-              {deleting ? "Eliminando..." : "Confirmar"}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>Cancelar</Button>
+          <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="size-5 shrink-0 text-red-500 mt-0.5" />
+              <p className="text-sm text-red-700">
+                ¿Eliminar {building.name}? Se borrarán todos los trabajos y reportes.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting} className="rounded-xl">
+                {deleting ? "Eliminando..." : "Confirmar"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)} className="rounded-xl">
+                Cancelar
+              </Button>
+            </div>
           </div>
         ) : (
-          <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>
+          <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)} className="rounded-xl">
             <Trash2 className="size-4" />
             Eliminar edificio
           </Button>
