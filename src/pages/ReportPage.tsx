@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams, Link, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { generatePdfFromElement } from "@/lib/pdf";
+import { generateReportPdf } from "@/lib/pdf";
 import type { Building, Job, Media, Report } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -283,11 +283,22 @@ export function ReportPage() {
   const [pdfError, setPdfError] = useState<string | null>(null);
 
   const handleContinue = async () => {
-    if (!reportRef.current) return;
+    if (!building) return;
     setGeneratingPdf(true);
     setPdfError(null);
     try {
-      const blob = await generatePdfFromElement(reportRef.current);
+      const blob = await generateReportPdf({
+        buildingName: building.name,
+        buildingAddress: building.address,
+        month: formatMonthLabel(month),
+        summary,
+        closing,
+        jobs: jobs.map((j) => ({
+          description: j.improved_description,
+          completedAt: formatDate(j.completed_at!),
+          media: j.media.map((m) => ({ url: m.url, type: m.type })),
+        })),
+      });
       setPdfBlob(blob);
       setStep("confirm");
     } catch (err) {
