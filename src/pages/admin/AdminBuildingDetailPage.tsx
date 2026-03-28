@@ -32,6 +32,12 @@ import {
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
+function normalizePhone(p: string): string {
+  let n = p.trim().replace(/[\s\-()]/g, "");
+  if (!n.startsWith("+")) n = "+" + n;
+  return n;
+}
+
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString("es-AR", {
     day: "2-digit",
@@ -129,7 +135,7 @@ export function AdminBuildingDetailPage() {
     const { error } = await supabase.from("tenants").insert({
       building_id: id,
       name: tenantName.trim(),
-      phone_number: tenantPhone.trim(),
+      phone_number: normalizePhone(tenantPhone),
       unit: tenantUnit.trim() || null,
     });
 

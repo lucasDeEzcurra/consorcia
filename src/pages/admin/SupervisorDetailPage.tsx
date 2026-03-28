@@ -14,6 +14,12 @@ import {
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
+function normalizePhone(p: string): string {
+  let n = p.trim().replace(/[\s\-()]/g, "");
+  if (!n.startsWith("+")) n = "+" + n;
+  return n;
+}
+
 export function SupervisorDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [supervisor, setSupervisor] = useState<Supervisor | null>(null);
@@ -62,7 +68,7 @@ export function SupervisorDetailPage() {
     setSaving(true);
     await supabase
       .from("supervisors")
-      .update({ name: name.trim(), phone_number: phone.trim() })
+      .update({ name: name.trim(), phone_number: normalizePhone(phone) })
       .eq("id", id);
     setSaving(false);
     fetchData();

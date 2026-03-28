@@ -15,6 +15,12 @@ import { Plus, Users, ChevronRight, Loader2 } from "lucide-react";
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
+function normalizePhone(p: string): string {
+  let n = p.trim().replace(/[\s\-()]/g, "");
+  if (!n.startsWith("+")) n = "+" + n;
+  return n;
+}
+
 interface SupervisorWithCount extends Supervisor {
   building_count: number;
 }
@@ -66,7 +72,7 @@ export function SupervisorsPage() {
     const { error } = await supabase.functions.invoke("create-supervisor", {
       body: {
         name: name.trim(),
-        phone_number: phone.trim(),
+        phone_number: normalizePhone(phone),
         email: email.trim(),
         password,
       },
