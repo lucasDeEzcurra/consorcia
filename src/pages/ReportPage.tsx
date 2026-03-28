@@ -73,6 +73,7 @@ export function ReportPage() {
 
   // PDF
   const reportRef = useRef<HTMLDivElement>(null);
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -145,7 +146,8 @@ export function ReportPage() {
       `Estimados propietarios,\n\nAdjuntamos el informe de gestión mensual correspondiente a ${formatMonthLabel(month)} del edificio ${bld.name}.\n\nQuedamos a disposición ante cualquier consulta.\n\nSaludos cordiales.`
     );
 
-    if (rData && (rData as Report).status === "sent") {
+    // If report already exists (draft or sent), load saved text — don't regenerate
+    if (rData) {
       const report = rData as Report;
       if (report.generated_text) {
         try {
@@ -164,11 +166,18 @@ export function ReportPage() {
         } catch {
           setSummary(report.generated_text);
         }
+      } else {
+        // Report exists but no saved text — use fallback
+        setSummary(
+          `Durante ${formatMonthLabel(month)} se completaron ${jobsWithMedia.length} trabajo${jobsWithMedia.length !== 1 ? "s" : ""} de mantenimiento en ${bld.name}.`
+        );
+        setClosing("Quedamos a disposición para cualquier consulta o requerimiento.");
       }
       setStep("preview");
       return;
     }
 
+    // No report exists yet — generate with AI
     await generateAiText(bld, jobsWithMedia);
   }, [id, month]);
 
@@ -261,18 +270,20 @@ export function ReportPage() {
     });
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    if (!reportRef.current) return;
+    // Generate PDF now while the preview is still in the DOM
+    const blob = await generatePdfFromElement(reportRef.current);
+    setPdfBlob(blob);
     setStep("confirm");
   };
 
   const handleSend = async () => {
-    if (!building || !reportRef.current) return;
+    if (!building || !pdfBlob) return;
     setStep("sending");
     setSendError(null);
 
     try {
-      const pdfBlob = await generatePdfFromElement(reportRef.current);
-
       const pdfPath = `reports/${building.id}/${month}.pdf`;
       await supabase.storage.from("media").remove([pdfPath]);
       const { error: uploadErr } = await supabase.storage
