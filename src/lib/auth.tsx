@@ -20,13 +20,24 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const LOADING_TIMEOUT_MS = 8000;
+
 async function fetchRole(userId: string): Promise<UserRole | null> {
-  const { data } = await supabase
-    .from("user_profiles")
-    .select("role")
-    .eq("user_id", userId)
-    .single();
-  return (data?.role as UserRole) ?? null;
+  try {
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("user_id", userId)
+      .single();
+    if (error) {
+      console.error("fetchRole error:", error.message);
+      return null;
+    }
+    return (data?.role as UserRole) ?? null;
+  } catch (err) {
+    console.error("fetchRole exception:", err);
+    return null;
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -35,28 +46,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        const r = await fetchRole(session.user.id);
-        setRole(r);
+    let mounted = true;
+
+    // Safety timeout — never stay in loading forever
+    const timeout = setTimeout(() => {
+      if (mounted && loading) {
+        console.warn("Auth loading timeout — forcing loaded state");
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    }, LOADING_TIMEOUT_MS);
+
+    async function init() {
+      try {
+        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+
+        if (!mounted) return;
+
+        if (error || !initialSession?.user) {
+          // No valid session — clear everything and stop loading
+          setSession(null);
+          setRole(null);
+          setLoading(false);
+          return;
+        }
+
+        setSession(initialSession);
+
+        const r = await fetchRole(initialSession.user.id);
+        if (!mounted) return;
+
+        if (r) {
+          setRole(r);
+        } else {
+          // Session exists but no role in DB — stale session, sign out
+          console.warn("Session exists but no role found — signing out");
+          await supabase.auth.signOut();
+          setSession(null);
+          setRole(null);
+        }
+      } catch (err) {
+        console.error("Auth init error:", err);
+        if (mounted) {
+          setSession(null);
+          setRole(null);
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    init();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      if (session?.user) {
-        const r = await fetchRole(session.user.id);
-        setRole(r);
-      } else {
+    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      if (!mounted) return;
+
+      if (event === "SIGNED_OUT" || !newSession?.user) {
+        setSession(null);
         setRole(null);
+        return;
+      }
+
+      setSession(newSession);
+
+      // Only re-fetch role on sign-in or token refresh, not on every event
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        const r = await fetchRole(newSession.user.id);
+        if (mounted) {
+          setRole(r);
+          if (!r && event === "SIGNED_IN") {
+            console.warn("Signed in but no role — signing out");
+            await supabase.auth.signOut();
+          }
+        }
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -68,8 +139,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
     setRole(null);
+    setSession(null);
+    await supabase.auth.signOut();
   };
 
   return (
