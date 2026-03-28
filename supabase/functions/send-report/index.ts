@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import nodemailer from "npm:nodemailer@7";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,48 +39,37 @@ Deno.serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const pdfBuffer = new Uint8Array(await pdfResponse.arrayBuffer());
-    const pdfBase64 = btoa(
-      pdfBuffer.reduce(
-        (data, byte) => data + String.fromCharCode(byte),
-        ""
-      )
-    );
+    const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
 
-    // Send via Gmail SMTP
-    const client = new SMTPClient({
-      connection: {
-        hostname: "smtp.gmail.com",
-        port: 465,
-        tls: true,
-        auth: {
-          username: gmailUser,
-          password: gmailPassword,
-        },
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      auth: {
+        user: gmailUser,
+        pass: gmailPassword,
       },
     });
 
-    await client.send({
+    const html = `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <p>${message.replace(/\n/g, "<br>")}</p>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+      <p style="color: #888; font-size: 12px;">Este email fue enviado por ${from_name}.</p>
+    </div>`;
+
+    await transporter.sendMail({
       from: `${from_name} <${gmailUser}>`,
-      to: to.join(", "),
+      to,
       subject,
-      content: "auto",
-      html: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <p>${message.replace(/\n/g, "<br>")}</p>
-        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-        <p style="color: #888; font-size: 12px;">Este email fue enviado por Consorcia.</p>
-      </div>`,
+      html,
       attachments: [
         {
-          content: pdfBase64,
           filename: "informe.pdf",
+          content: pdfBuffer,
           contentType: "application/pdf",
-          encoding: "base64",
         },
       ],
     });
-
-    await client.close();
 
     return new Response(
       JSON.stringify({ success: true }),

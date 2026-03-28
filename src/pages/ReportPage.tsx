@@ -315,6 +315,7 @@ export function ReportPage() {
     setSendError(null);
 
     try {
+      // Upload PDF to storage
       const pdfPath = `reports/${building.id}/${month}.pdf`;
       await supabase.storage.from("media").remove([pdfPath]);
       const { error: uploadErr } = await supabase.storage
@@ -328,6 +329,7 @@ export function ReportPage() {
         .getPublicUrl(pdfPath);
       const pdfUrl = urlData.publicUrl;
 
+      // Save report to DB
       const reportText = JSON.stringify({
         summary,
         closing,
@@ -353,6 +355,7 @@ export function ReportPage() {
         });
       }
 
+      // Send email via edge function
       const { data: sendData, error: sendErr } = await supabase.functions.invoke(
         "send-report",
         {
@@ -370,7 +373,6 @@ export function ReportPage() {
         throw new Error(`Error enviando email: ${sendErr.message}`);
       }
 
-      // The edge function returns JSON with error field on failure
       if (sendData?.error) {
         throw new Error(`Error enviando email: ${sendData.error}`);
       }
