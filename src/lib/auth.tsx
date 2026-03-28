@@ -40,15 +40,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const initDone = useRef(false);
+  // Tracks the latest onAuthStateChange call so stale fetchRole results
+  // (from an earlier event) don't overwrite state set by a newer event.
+  const authVersion = useRef(0);
 
   useEffect(() => {
+    let mounted = true;
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-      // Set session and role atomically — don't set session without role
+      if (!mounted) return;
+      const thisVersion = ++authVersion.current;
+
       if (newSession?.user) {
         const r = await fetchRole(newSession.user.id);
-        // Set both at once so consumers never see session+null role
+        // A newer event arrived while fetchRole was in-flight — discard this result
+        if (!mounted || authVersion.current !== thisVersion) return;
         setSession(newSession);
         setRole(r);
       } else {
@@ -62,7 +70,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Safety net: if onAuthStateChange never fires (e.g. token refresh hangs),
+    // stop showing the loading spinner after 4 seconds.
+    const timeout = setTimeout(() => {
+      if (!initDone.current && mounted) {
+        initDone.current = true;
+        setLoading(false);
+      }
+    }, 4000);
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {

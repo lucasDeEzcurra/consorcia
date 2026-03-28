@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Building2, ArrowLeft, Loader2 } from "lucide-react";
@@ -13,8 +13,16 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Still initializing auth — show spinner
-  if (loading) {
+  // Session exists but no role (user_profiles row missing or fetch failed).
+  // Sign them out via useEffect (not during render) to break the loop.
+  useEffect(() => {
+    if (!loading && session && !role) {
+      signOut();
+    }
+  }, [loading, session, role, signOut]);
+
+  // Still initializing, or waiting for signOut to clear the broken session
+  if (loading || (session && !role)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0b1120]">
         <Loader2 className="size-6 animate-spin text-amber-500" />
@@ -22,21 +30,9 @@ export function LoginPage() {
     );
   }
 
-  // Signed in with a valid role → redirect to dashboard
   if (session && role) {
     const redirect = role === "admin" ? "/admin/dashboard" : "/dashboard";
     return <Navigate to={redirect} replace />;
-  }
-
-  // Session exists but no role → user_profiles row missing or fetch failed.
-  // Sign them out so they don't get stuck in a loading loop.
-  if (session && !role) {
-    signOut();
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0b1120]">
-        <Loader2 className="size-6 animate-spin text-amber-500" />
-      </div>
-    );
   }
 
   const handleSubmit = async (e: FormEvent) => {
