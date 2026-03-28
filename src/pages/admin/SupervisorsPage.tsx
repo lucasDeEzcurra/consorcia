@@ -39,25 +39,30 @@ export function SupervisorsPage() {
   const [createError, setCreateError] = useState<string | null>(null);
 
   const fetchSupervisors = async () => {
-    const [supRes, bldRes] = await Promise.all([
-      supabase.from("supervisors").select("*").order("name"),
-      supabase.from("buildings").select("id, supervisor_id"),
-    ]);
+    try {
+      const [supRes, bldRes] = await Promise.all([
+        supabase.from("supervisors").select("*").order("name"),
+        supabase.from("buildings").select("id, supervisor_id"),
+      ]);
 
-    const sups = (supRes.data ?? []) as Supervisor[];
-    const buildings = (bldRes.data ?? []) as { id: string; supervisor_id: string | null }[];
+      const sups = (supRes.data ?? []) as Supervisor[];
+      const buildings = (bldRes.data ?? []) as { id: string; supervisor_id: string | null }[];
 
-    const countBySuper = new Map<string, number>();
-    for (const b of buildings) {
-      if (b.supervisor_id) {
-        countBySuper.set(b.supervisor_id, (countBySuper.get(b.supervisor_id) ?? 0) + 1);
+      const countBySuper = new Map<string, number>();
+      for (const b of buildings) {
+        if (b.supervisor_id) {
+          countBySuper.set(b.supervisor_id, (countBySuper.get(b.supervisor_id) ?? 0) + 1);
+        }
       }
-    }
 
-    setSupervisors(
-      sups.map((s) => ({ ...s, building_count: countBySuper.get(s.id) ?? 0 }))
-    );
-    setLoading(false);
+      setSupervisors(
+        sups.map((s) => ({ ...s, building_count: countBySuper.get(s.id) ?? 0 }))
+      );
+    } catch (err) {
+      console.error("Fetch supervisors error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {

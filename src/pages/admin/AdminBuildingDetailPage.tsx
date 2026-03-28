@@ -93,33 +93,37 @@ export function AdminBuildingDetailPage() {
 
   const fetchData = useCallback(async () => {
     if (!id) return;
-    const [bldRes, supRes, jobRes, repRes, tenantRes, reqRes] = await Promise.all([
-      supabase.from("buildings").select("*").eq("id", id).single(),
-      supabase.from("supervisors").select("*").order("name"),
-      supabase.from("jobs").select("*").eq("building_id", id).order("created_at", { ascending: false }).limit(20),
-      supabase.from("reports").select("*").eq("building_id", id).order("month", { ascending: false }),
-      supabase.from("tenants").select("*").eq("building_id", id).order("name"),
-      supabase.from("tenant_requests").select("*").eq("building_id", id).order("created_at", { ascending: false }),
-    ]);
+    try {
+      const [bldRes, supRes, jobRes, repRes, tenantRes, reqRes] = await Promise.all([
+        supabase.from("buildings").select("*").eq("id", id).single(),
+        supabase.from("supervisors").select("*").order("name"),
+        supabase.from("jobs").select("*").eq("building_id", id).order("created_at", { ascending: false }).limit(20),
+        supabase.from("reports").select("*").eq("building_id", id).order("month", { ascending: false }),
+        supabase.from("tenants").select("*").eq("building_id", id).order("name"),
+        supabase.from("tenant_requests").select("*").eq("building_id", id).order("created_at", { ascending: false }),
+      ]);
 
-    const bld = bldRes.data as Building | null;
-    setBuilding(bld);
-    if (bld) {
-      setName(bld.name);
-      setAddress(bld.address);
-      setSupervisorId(bld.supervisor_id ?? "");
+      const bld = bldRes.data as Building | null;
+      setBuilding(bld);
+      if (bld) {
+        setName(bld.name);
+        setAddress(bld.address);
+        setSupervisorId(bld.supervisor_id ?? "");
+      }
+      setSupervisors((supRes.data ?? []) as Supervisor[]);
+      setJobs((jobRes.data ?? []) as Job[]);
+      setReports((repRes.data ?? []) as Report[]);
+
+      const tenantsList = (tenantRes.data ?? []) as Tenant[];
+      setTenants(tenantsList);
+      const tenantMap = new Map(tenantsList.map((t) => [t.id, t.name]));
+      const reqs = (reqRes.data ?? []) as TenantRequest[];
+      setRequests(reqs.map((r) => ({ ...r, tenant_name: tenantMap.get(r.tenant_id) })));
+    } catch (err) {
+      console.error("Fetch building detail error:", err);
+    } finally {
+      setLoading(false);
     }
-    setSupervisors((supRes.data ?? []) as Supervisor[]);
-    setJobs((jobRes.data ?? []) as Job[]);
-    setReports((repRes.data ?? []) as Report[]);
-
-    const tenantsList = (tenantRes.data ?? []) as Tenant[];
-    setTenants(tenantsList);
-    const tenantMap = new Map(tenantsList.map((t) => [t.id, t.name]));
-    const reqs = (reqRes.data ?? []) as TenantRequest[];
-    setRequests(reqs.map((r) => ({ ...r, tenant_name: tenantMap.get(r.tenant_id) })));
-
-    setLoading(false);
   }, [id]);
 
   useEffect(() => {

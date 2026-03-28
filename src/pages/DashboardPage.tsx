@@ -47,86 +47,63 @@ export function DashboardPage() {
     if (!user) return;
 
     async function fetchData() {
-      const { data: supervisor } = await supabase
-        .from("supervisors")
-        .select("id")
-        .eq("user_id", user!.id)
-        .single();
-
-      if (!supervisor) {
-        setLoading(false);
-        return;
-      }
-
-      setSupervisorId(supervisor.id);
-
-      const { data: buildingsData } = await supabase
-        .from("buildings")
-        .select("*")
-        .eq("supervisor_id", supervisor.id)
-        .order("name");
-
-      const buildingsList = (buildingsData ?? []) as Building[];
-
-      if (buildingsList.length === 0) {
-        setLoading(false);
-        return;
-      }
-
-      const buildingIds = buildingsList.map((b) => b.id);
-      const month = currentMonth();
-      const monthStart = `${month}-01T00:00:00.000Z`;
-      const nextMonth = new Date(
-        Number(month.split("-")[0]),
-        Number(month.split("-")[1]),
-        1
-      ).toISOString();
-
-      const [pendingRes, completedRes, reportsRes] = await Promise.all([
-        supabase
-          .from("jobs")
-          .select("id, building_id")
-          .in("building_id", buildingIds)
-          .eq("status", "pending"),
-        supabase
-          .from("jobs")
+      try {
+        const { data: supervisor } = await supabase
+          .from("supervisors")
           .select("id")
-          .in("building_id", buildingIds)
-          .eq("status", "completed")
-          .gte("completed_at", monthStart)
-          .lt("completed_at", nextMonth),
-        supabase
-          .from("reports")
-          .select("id")
-          .in("building_id", buildingIds)
-          .eq("month", month),
-      ]);
+          .eq("user_id", user!.id)
+          .single();
 
-      const pendingJobs = pendingRes.data ?? [];
-      const completedJobs = completedRes.data ?? [];
-      const reports = reportsRes.data ?? [];
+        if (!supervisor) return;
 
-      const pendingByBuilding = new Map<string, number>();
-      for (const job of pendingJobs) {
-        const prev = pendingByBuilding.get(job.building_id) ?? 0;
-        pendingByBuilding.set(job.building_id, prev + 1);
+        setSupervisorId(supervisor.id);
+
+        const { data: buildingsData } = await supabase
+          .from("buildings")
+          .select("*")
+          .eq("supervisor_id", supervisor.id)
+          .order("name");
+
+        const buildingsList = (buildingsData ?? []) as Building[];
+        if (buildingsList.length === 0) return;
+
+        const buildingIds = buildingsList.map((b) => b.id);
+        const month = currentMonth();
+        const monthStart = `${month}-01T00:00:00.000Z`;
+        const nextMonth = new Date(
+          Number(month.split("-")[0]),
+          Number(month.split("-")[1]),
+          1
+        ).toISOString();
+
+        const [pendingRes, completedRes, reportsRes] = await Promise.all([
+          supabase.from("jobs").select("id, building_id").in("building_id", buildingIds).eq("status", "pending"),
+          supabase.from("jobs").select("id").in("building_id", buildingIds).eq("status", "completed").gte("completed_at", monthStart).lt("completed_at", nextMonth),
+          supabase.from("reports").select("id").in("building_id", buildingIds).eq("month", month),
+        ]);
+
+        const pendingJobs = pendingRes.data ?? [];
+        const completedJobs = completedRes.data ?? [];
+        const reports = reportsRes.data ?? [];
+
+        const pendingByBuilding = new Map<string, number>();
+        for (const job of pendingJobs) {
+          const prev = pendingByBuilding.get(job.building_id) ?? 0;
+          pendingByBuilding.set(job.building_id, prev + 1);
+        }
+
+        setBuildings(buildingsList.map((b) => ({ ...b, pending_count: pendingByBuilding.get(b.id) ?? 0 })));
+        setMetrics({
+          totalBuildings: buildingsList.length,
+          pendingJobs: pendingJobs.length,
+          completedThisMonth: completedJobs.length,
+          reportsThisMonth: reports.length,
+        });
+      } catch (err) {
+        console.error("Dashboard fetch error:", err);
+      } finally {
+        setLoading(false);
       }
-
-      const buildingsWithCount: BuildingWithPendingCount[] = buildingsList.map(
-        (b) => ({
-          ...b,
-          pending_count: pendingByBuilding.get(b.id) ?? 0,
-        })
-      );
-
-      setBuildings(buildingsWithCount);
-      setMetrics({
-        totalBuildings: buildingsList.length,
-        pendingJobs: pendingJobs.length,
-        completedThisMonth: completedJobs.length,
-        reportsThisMonth: reports.length,
-      });
-      setLoading(false);
     }
 
     fetchData();

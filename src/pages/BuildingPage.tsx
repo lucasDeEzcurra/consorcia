@@ -195,15 +195,20 @@ export function BuildingPage() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    await Promise.all([
-      fetchBuilding(),
-      fetchPending(),
-      fetchCompleted(),
-      fetchHistory(0),
-      fetchReports(),
-      fetchRequests(),
-    ]);
-    setLoading(false);
+    try {
+      await Promise.all([
+        fetchBuilding(),
+        fetchPending(),
+        fetchCompleted(),
+        fetchHistory(0),
+        fetchReports(),
+        fetchRequests(),
+      ]);
+    } catch (err) {
+      console.error("Building page fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
   }, [fetchBuilding, fetchPending, fetchCompleted, fetchHistory, fetchReports, fetchRequests]);
 
   useEffect(() => {

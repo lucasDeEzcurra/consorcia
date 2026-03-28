@@ -41,44 +41,42 @@ export function AdminDashboardPage() {
 
   useEffect(() => {
     async function fetch() {
-      const [supRes, bldRes, pendingRes, completedRes] = await Promise.all([
-        supabase.from("supervisors").select("*").order("name"),
-        supabase.from("buildings").select("id, supervisor_id"),
-        supabase.from("jobs").select("id").eq("status", "pending"),
-        (() => {
-          const month = currentMonth();
-          const start = `${month}-01T00:00:00.000Z`;
-          const [y, m] = month.split("-");
-          const end = new Date(Number(y), Number(m), 1).toISOString();
-          return supabase
-            .from("jobs")
-            .select("id")
-            .eq("status", "completed")
-            .gte("completed_at", start)
-            .lt("completed_at", end);
-        })(),
-      ]);
+      try {
+        const [supRes, bldRes, pendingRes, completedRes] = await Promise.all([
+          supabase.from("supervisors").select("*").order("name"),
+          supabase.from("buildings").select("id, supervisor_id"),
+          supabase.from("jobs").select("id").eq("status", "pending"),
+          (() => {
+            const month = currentMonth();
+            const start = `${month}-01T00:00:00.000Z`;
+            const [y, m] = month.split("-");
+            const end = new Date(Number(y), Number(m), 1).toISOString();
+            return supabase.from("jobs").select("id").eq("status", "completed").gte("completed_at", start).lt("completed_at", end);
+          })(),
+        ]);
 
-      const sups = (supRes.data ?? []) as Supervisor[];
-      const buildings = (bldRes.data ?? []) as { id: string; supervisor_id: string | null }[];
+        const sups = (supRes.data ?? []) as Supervisor[];
+        const buildings = (bldRes.data ?? []) as { id: string; supervisor_id: string | null }[];
 
-      const countBySuper = new Map<string, number>();
-      for (const b of buildings) {
-        if (b.supervisor_id) {
-          countBySuper.set(b.supervisor_id, (countBySuper.get(b.supervisor_id) ?? 0) + 1);
+        const countBySuper = new Map<string, number>();
+        for (const b of buildings) {
+          if (b.supervisor_id) {
+            countBySuper.set(b.supervisor_id, (countBySuper.get(b.supervisor_id) ?? 0) + 1);
+          }
         }
-      }
 
-      setSupervisors(
-        sups.map((s) => ({ ...s, building_count: countBySuper.get(s.id) ?? 0 }))
-      );
-      setMetrics({
-        totalSupervisors: sups.length,
-        totalBuildings: buildings.length,
-        pendingJobs: pendingRes.data?.length ?? 0,
-        completedThisMonth: completedRes.data?.length ?? 0,
-      });
-      setLoading(false);
+        setSupervisors(sups.map((s) => ({ ...s, building_count: countBySuper.get(s.id) ?? 0 })));
+        setMetrics({
+          totalSupervisors: sups.length,
+          totalBuildings: buildings.length,
+          pendingJobs: pendingRes.data?.length ?? 0,
+          completedThisMonth: completedRes.data?.length ?? 0,
+        });
+      } catch (err) {
+        console.error("Admin dashboard fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
     }
     fetch();
   }, []);

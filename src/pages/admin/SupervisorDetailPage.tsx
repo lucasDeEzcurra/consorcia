@@ -41,21 +41,26 @@ export function SupervisorDetailPage() {
 
   const fetchData = useCallback(async () => {
     if (!id) return;
-    const [supRes, bldRes, allBldRes] = await Promise.all([
-      supabase.from("supervisors").select("*").eq("id", id).single(),
-      supabase.from("buildings").select("*").eq("supervisor_id", id).order("name"),
-      supabase.from("buildings").select("*").is("supervisor_id", null).order("name"),
-    ]);
+    try {
+      const [supRes, bldRes, allBldRes] = await Promise.all([
+        supabase.from("supervisors").select("*").eq("id", id).single(),
+        supabase.from("buildings").select("*").eq("supervisor_id", id).order("name"),
+        supabase.from("buildings").select("*").is("supervisor_id", null).order("name"),
+      ]);
 
-    const sup = supRes.data as Supervisor | null;
-    setSupervisor(sup);
-    if (sup) {
-      setName(sup.name);
-      setPhone(sup.phone_number);
+      const sup = supRes.data as Supervisor | null;
+      setSupervisor(sup);
+      if (sup) {
+        setName(sup.name);
+        setPhone(sup.phone_number);
+      }
+      setBuildings((bldRes.data ?? []) as Building[]);
+      setUnassigned((allBldRes.data ?? []) as Building[]);
+    } catch (err) {
+      console.error("Fetch supervisor detail error:", err);
+    } finally {
+      setLoading(false);
     }
-    setBuildings((bldRes.data ?? []) as Building[]);
-    setUnassigned((allBldRes.data ?? []) as Building[]);
-    setLoading(false);
   }, [id]);
 
   useEffect(() => {

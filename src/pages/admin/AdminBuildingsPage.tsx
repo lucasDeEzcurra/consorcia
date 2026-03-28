@@ -32,23 +32,28 @@ export function AdminBuildingsPage() {
   const [creating, setCreating] = useState(false);
 
   const fetchBuildings = async () => {
-    const [bldRes, supRes] = await Promise.all([
-      supabase.from("buildings").select("*").order("name"),
-      supabase.from("supervisors").select("*").order("name"),
-    ]);
+    try {
+      const [bldRes, supRes] = await Promise.all([
+        supabase.from("buildings").select("*").order("name"),
+        supabase.from("supervisors").select("*").order("name"),
+      ]);
 
-    const sups = (supRes.data ?? []) as Supervisor[];
-    setSupervisors(sups);
-    const supMap = new Map(sups.map((s) => [s.id, s.name]));
+      const sups = (supRes.data ?? []) as Supervisor[];
+      setSupervisors(sups);
+      const supMap = new Map(sups.map((s) => [s.id, s.name]));
 
-    const blds = (bldRes.data ?? []) as Building[];
-    setBuildings(
-      blds.map((b) => ({
-        ...b,
-        supervisor_name: b.supervisor_id ? supMap.get(b.supervisor_id) ?? null : null,
-      }))
-    );
-    setLoading(false);
+      const blds = (bldRes.data ?? []) as Building[];
+      setBuildings(
+        blds.map((b) => ({
+          ...b,
+          supervisor_name: b.supervisor_id ? supMap.get(b.supervisor_id) ?? null : null,
+        }))
+      );
+    } catch (err) {
+      console.error("Fetch buildings error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
