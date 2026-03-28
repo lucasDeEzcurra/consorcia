@@ -183,8 +183,8 @@ export function ReportPage() {
         `Estimados propietarios,\n\nAdjuntamos el informe de gestión mensual correspondiente a ${formatMonthLabel(month)} del edificio ${bld.name}.\n\nQuedamos a disposición ante cualquier consulta.\n\nSaludos cordiales.`
       );
 
-      // If report already exists (draft or sent), load saved text — don't regenerate
-      if (rData) {
+      // If report was already sent, load saved text
+      if (rData && (rData as Report).status === "sent") {
         const report = rData as Report;
         if (report.generated_text) {
           try {
@@ -197,7 +197,6 @@ export function ReportPage() {
             }
             if (parsed.improved_descriptions) {
               setAiUsed(true);
-              // Handle both object {id: desc} and array [desc] formats
               if (Array.isArray(parsed.improved_descriptions)) {
                 for (let i = 0; i < jobsWithMedia.length; i++) {
                   if (parsed.improved_descriptions[i]) {
@@ -216,18 +215,12 @@ export function ReportPage() {
           } catch {
             setSummary(report.generated_text);
           }
-        } else {
-          // Report exists but no saved text — use fallback
-          setSummary(
-            `Durante ${formatMonthLabel(month)} se completaron ${jobsWithMedia.length} trabajo${jobsWithMedia.length !== 1 ? "s" : ""} de mantenimiento en ${bld.name}.`
-          );
-          setClosing("Quedamos a disposición para cualquier consulta o requerimiento.");
         }
         setStep("preview");
         return;
       }
 
-      // No report exists yet — show job selection
+      // Draft or no report — show job selection
       setStep("select");
     } catch (err) {
       console.error("ReportPage fetch error:", err);
