@@ -89,12 +89,13 @@ export function ReportPage() {
 
     if (!bld) return;
 
+    // Fetch report — use .maybeSingle() to avoid error on 0 rows
     const { data: rData } = await supabase
       .from("reports")
       .select("*")
       .eq("building_id", id)
       .eq("month", month)
-      .single();
+      .maybeSingle();
 
     if (rData) {
       setExistingReport(rData as Report);
@@ -270,16 +271,37 @@ export function ReportPage() {
     });
   };
 
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+
   const handleContinue = async () => {
     if (!reportRef.current) return;
-    // Generate PDF now while the preview is still in the DOM
-    const blob = await generatePdfFromElement(reportRef.current);
-    setPdfBlob(blob);
+    setGeneratingPdf(true);
+    try {
+      const blob = await generatePdfFromElement(reportRef.current);
+      setPdfBlob(blob);
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      // Continue anyway — PDF will be regenerated on send if needed
+    }
+    setGeneratingPdf(false);
     setStep("confirm");
   };
 
   const handleSend = async () => {
-    if (!building || !pdfBlob) return;
+    if (!building) return;
+    // If PDF wasn't generated (error during handleContinue), try again
+    let pdf = pdfBlob;
+    if (!pdf && reportRef.current) {
+      try {
+        pdf = await generatePdfFromElement(reportRef.current);
+      } catch {
+        // Can't generate PDF at all
+      }
+    }
+    if (!pdf) {
+      setSendError("No se pudo generar el PDF. Volvé al preview e intentá de nuevo.");
+      return;
+    }
     setStep("sending");
     setSendError(null);
 
@@ -288,7 +310,7 @@ export function ReportPage() {
       await supabase.storage.from("media").remove([pdfPath]);
       const { error: uploadErr } = await supabase.storage
         .from("media")
-        .upload(pdfPath, pdfBlob, { contentType: "application/pdf" });
+        .upload(pdfPath, pdf, { contentType: "application/pdf" });
 
       if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
 
@@ -545,10 +567,20 @@ export function ReportPage() {
           )}
           <Button
             onClick={handleContinue}
+            disabled={generatingPdf}
             className="h-10 rounded-xl bg-amber-500 px-5 text-[#0b1120] hover:bg-amber-400"
           >
-            Continuar
-            <Send className="ml-1 size-4" />
+            {generatingPdf ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Preparando...
+              </>
+            ) : (
+              <>
+                Continuar
+                <Send className="ml-1 size-4" />
+              </>
+            )}
           </Button>
         </div>
       </div>
