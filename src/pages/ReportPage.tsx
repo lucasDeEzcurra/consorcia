@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams, useSearchParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { generatePdfFromElement } from "@/lib/pdf";
 import type { Building, Job, Media, Report } from "@/types/database";
@@ -49,7 +49,11 @@ function currentMonth() {
 export function ReportPage() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const month = searchParams.get("month") ?? currentMonth();
+  const isAdmin = location.pathname.startsWith("/admin");
+  const buildingUrl = isAdmin ? `/admin/buildings/${id}` : `/buildings/${id}`;
+  const dashboardUrl = isAdmin ? "/admin/buildings" : "/dashboard";
 
   const [step, setStep] = useState<Step>("loading");
   const [building, setBuilding] = useState<Building | null>(null);
@@ -346,8 +350,8 @@ export function ReportPage() {
     return (
       <div className="py-20 text-center">
         <p className="text-sm text-slate-500">Edificio no encontrado.</p>
-        <Link to="/dashboard" className="mt-2 inline-block text-sm text-amber-600 hover:text-amber-500">
-          Volver al dashboard
+        <Link to={dashboardUrl} className="mt-2 inline-block text-sm text-amber-600 hover:text-amber-500">
+          Volver
         </Link>
       </div>
     );
@@ -386,7 +390,7 @@ export function ReportPage() {
             {recipients.length !== 1 ? "s" : ""}.
           </p>
         </div>
-        <Link to={`/buildings/${id}`}>
+        <Link to={buildingUrl}>
           <Button variant="outline" className="rounded-xl">Volver al edificio</Button>
         </Link>
       </div>
@@ -515,7 +519,7 @@ export function ReportPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Link
-            to={`/buildings/${id}`}
+            to={buildingUrl}
             className="flex size-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
           >
             <ArrowLeft className="size-5" />

@@ -38,6 +38,7 @@ export const router = createBrowserRouter([
               { path: "/admin/supervisors/:id", element: <SupervisorDetailPage /> },
               { path: "/admin/buildings", element: <AdminBuildingsPage /> },
               { path: "/admin/buildings/:id", element: <AdminBuildingDetailPage /> },
+              { path: "/admin/buildings/:id/report", element: <ReportPage /> },
             ],
           },
         ],

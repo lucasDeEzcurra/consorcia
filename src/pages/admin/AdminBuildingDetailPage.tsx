@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import type { Building, Supervisor, Job, Report } from "@/types/database";
+import type { Building, Supervisor, Job, Report, Media } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { JobDetailDialog } from "@/components/JobDetailDialog";
 import {
   ArrowLeft,
   Save,
@@ -14,6 +15,7 @@ import {
   ClipboardList,
   CheckCircle2,
   FileText,
+  ChevronRight,
 } from "lucide-react";
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
@@ -24,6 +26,12 @@ function formatDate(d: string) {
     month: "short",
     year: "numeric",
   });
+}
+
+function formatMonthLabel(month: string) {
+  const [y, m] = month.split("-");
+  const date = new Date(Number(y), Number(m) - 1);
+  return date.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
 }
 
 export function AdminBuildingDetailPage() {
@@ -43,6 +51,11 @@ export function AdminBuildingDetailPage() {
   // Delete
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Job detail dialog
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [selectedJobMedia, setSelectedJobMedia] = useState<Media[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!id) return;
@@ -100,6 +113,45 @@ export function AdminBuildingDetailPage() {
     window.location.href = "/admin/buildings";
   };
 
+  // Job detail
+  const openJobDetail = async (job: Job) => {
+    setSelectedJob(job);
+    const { data } = await supabase
+      .from("media")
+      .select("*")
+      .eq("job_id", job.id)
+      .order("created_at");
+    setSelectedJobMedia((data as Media[]) ?? []);
+    setDialogOpen(true);
+  };
+
+  const handleJobUpdated = () => {
+    fetchData();
+    if (selectedJob) {
+      supabase
+        .from("jobs")
+        .select("*")
+        .eq("id", selectedJob.id)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setSelectedJob(data as Job);
+            supabase
+              .from("media")
+              .select("*")
+              .eq("job_id", data.id)
+              .order("created_at")
+              .then(({ data: mediaData }) => {
+                setSelectedJobMedia((mediaData as Media[]) ?? []);
+              });
+          } else {
+            setDialogOpen(false);
+            setSelectedJob(null);
+          }
+        });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center gap-3 py-20 justify-center">
@@ -133,9 +185,12 @@ export function AdminBuildingDetailPage() {
         >
           <ArrowLeft className="size-5" />
         </Link>
-        <h1 className="text-2xl text-slate-900 sm:text-3xl" style={serif}>
-          {building.name}
-        </h1>
+        <div>
+          <h1 className="text-2xl text-slate-900 sm:text-3xl" style={serif}>
+            {building.name}
+          </h1>
+          <p className="text-sm text-slate-400">{building.address}</p>
+        </div>
       </div>
 
       {/* Edit form */}
@@ -194,7 +249,7 @@ export function AdminBuildingDetailPage() {
         ))}
       </div>
 
-      {/* Recent jobs */}
+      {/* Recent jobs - clickable */}
       <div>
         <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
           Últimos trabajos
@@ -207,21 +262,33 @@ export function AdminBuildingDetailPage() {
         ) : (
           <div className="space-y-2">
             {jobs.map((j) => (
-              <div key={j.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+              <button
+                key={j.id}
+                onClick={() => openJobDetail(j)}
+                className="group flex w-full items-center justify-between rounded-xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-all hover:border-amber-200 hover:shadow-md"
+              >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-slate-800">{j.description_original}</p>
-                  <p className="text-xs text-slate-400">{formatDate(j.created_at)}</p>
+                  <p className="text-xs text-slate-400">
+                    {j.completed_at ? `Completado: ${formatDate(j.completed_at)}` : `Creado: ${formatDate(j.created_at)}`}
+                  </p>
                 </div>
-                <Badge variant={j.status === "pending" ? "outline" : "default"}>
-                  {j.status === "pending" ? "Pendiente" : "Completado"}
-                </Badge>
-              </div>
+                <div className="ml-3 flex shrink-0 items-center gap-2">
+                  {j.expense_amount && (
+                    <Badge variant="secondary">${j.expense_amount}</Badge>
+                  )}
+                  <Badge variant={j.status === "pending" ? "outline" : "default"}>
+                    {j.status === "pending" ? "Pendiente" : "Completado"}
+                  </Badge>
+                  <ChevronRight className="size-4 text-slate-300 transition-colors group-hover:text-amber-500" />
+                </div>
+              </button>
             ))}
           </div>
         )}
       </div>
 
-      {/* Reports */}
+      {/* Reports - clickable */}
       {reports.length > 0 && (
         <div>
           <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
@@ -229,12 +296,31 @@ export function AdminBuildingDetailPage() {
           </h2>
           <div className="space-y-2">
             {reports.map((r) => (
-              <div key={r.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-                <p className="text-sm font-medium text-slate-800">{r.month}</p>
-                <Badge variant={r.status === "sent" ? "default" : "outline"}>
-                  {r.status === "sent" ? "Enviado" : "Borrador"}
-                </Badge>
-              </div>
+              <Link
+                key={r.id}
+                to={`/admin/buildings/${building.id}/report?month=${r.month}`}
+                className="group flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4 shadow-sm transition-all hover:border-amber-200 hover:shadow-md"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-slate-100 transition-colors group-hover:bg-amber-50">
+                    <FileText className="size-5 text-slate-400 transition-colors group-hover:text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800 capitalize">
+                      {formatMonthLabel(r.month)}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {r.sent_at ? `Enviado: ${formatDate(r.sent_at)}` : `Creado: ${formatDate(r.created_at)}`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={r.status === "sent" ? "default" : "outline"}>
+                    {r.status === "sent" ? "Enviado" : "Borrador"}
+                  </Badge>
+                  <ChevronRight className="size-4 text-slate-300 transition-colors group-hover:text-amber-500" />
+                </div>
+              </Link>
             ))}
           </div>
         </div>
@@ -266,6 +352,18 @@ export function AdminBuildingDetailPage() {
           </Button>
         )}
       </div>
+
+      {/* Job Detail Dialog */}
+      <JobDetailDialog
+        job={selectedJob}
+        media={selectedJobMedia}
+        open={dialogOpen}
+        onClose={() => {
+          setDialogOpen(false);
+          setSelectedJob(null);
+        }}
+        onUpdated={handleJobUpdated}
+      />
     </div>
   );
 }
