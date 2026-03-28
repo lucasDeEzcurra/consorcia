@@ -8,7 +8,7 @@ The goal is to build a production-oriented MVP, not a demo script. Focus on clea
 
 Consorcia is a platform for building management companies.
 
-Supervisors report maintenance work via WhatsApp (using a bot), and the system generates a monthly PDF report per building, which can be reviewed in a web app and then sent by email to all property owners.
+Supervisors report maintenance work via Telegram (using a bot), and the system generates a monthly PDF report per building, which can be reviewed in a web app and then sent by email to all property owners.
 
 ---
 
@@ -16,7 +16,7 @@ Supervisors report maintenance work via WhatsApp (using a bot), and the system g
 
 - Frontend: React (prefer simple setup like Vite)
 - Backend: Supabase (PostgreSQL + Auth + Storage)
-- WhatsApp: Twilio Sandbox (webhook आधारित)
+- Telegram: Telegram Bot API (webhook)
 - AI: OpenAI or Claude (for text generation only)
 - PDF: HTML template → PDF generation
 
@@ -33,7 +33,7 @@ Supervisors report maintenance work via WhatsApp (using a bot), and the system g
 
 ## Supervisor
 - Has assigned buildings
-- Uses WhatsApp bot to create/update jobs
+- Uses Telegram bot to create/update jobs
 - Uses web app to:
   - view jobs
   - edit jobs
@@ -47,7 +47,7 @@ Supervisors report maintenance work via WhatsApp (using a bot), and the system g
 ## Supervisor
 - id
 - name
-- phone_number (used for WhatsApp identification)
+- phone_number (used for Telegram identification)
 
 ## Building
 - id
@@ -62,7 +62,7 @@ Represents a single maintenance task.
 Fields:
 - id
 - building_id
-- description_original (from WhatsApp)
+- description_original (from Telegram)
 - description_generated (AI-enhanced)
 - status: "pending" | "completed"
 - created_at
@@ -100,9 +100,9 @@ Fields:
 
 ---
 
-# 📲 WHATSAPP BOT FLOW (Twilio Webhook)
+# 📲 TELEGRAM BOT FLOW (Webhook)
 
-Supervisor is identified by phone_number.
+Supervisor is identified by Telegram chat ID (stored in phone_number field).
 
 ## Flow:
 
@@ -251,7 +251,7 @@ Tabs:
 # ⚙️ WHAT TO BUILD
 
 1. Supabase schema (SQL)
-2. Twilio webhook handler (Node or Supabase Edge Function)
+2. Telegram webhook handler (Supabase Edge Function)
 3. React frontend:
    - dashboard
    - building page
@@ -267,7 +267,7 @@ Tabs:
 
 Focus on:
 - end-to-end flow working
-- WhatsApp → DB → Web → PDF → Email
+- Telegram → DB → Web → PDF → Email
 
 Avoid:
 - overengineering

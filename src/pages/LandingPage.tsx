@@ -163,7 +163,7 @@ export function LandingPage() {
 
           <FadeIn delay={0.2}>
             <p className="mt-8 max-w-xl text-lg leading-relaxed text-slate-400 md:text-xl">
-              Consorcia conecta a tus supervisores por WhatsApp, organiza los
+              Consorcia conecta a tus supervisores por Telegram, organiza los
               trabajos de mantenimiento con fotos, y genera reportes
               profesionales con inteligencia artificial.{" "}
               <span className="text-slate-200">
@@ -332,9 +332,9 @@ export function LandingPage() {
               {
                 icon: MessageSquare,
                 color: "bg-green-500",
-                title: "WhatsApp como canal principal",
-                desc: "Tus supervisores reportan trabajos directamente desde WhatsApp. Mandan fotos, describen el problema, y todo queda registrado automáticamente. Sin apps, sin capacitación.",
-                tag: "WhatsApp Bot",
+                title: "Telegram como canal principal",
+                desc: "Tus supervisores reportan trabajos directamente desde Telegram. Mandan fotos, describen el problema, y todo queda registrado automáticamente. Sin apps, sin capacitación.",
+                tag: "Telegram Bot",
               },
               {
                 icon: FileText,
@@ -412,7 +412,7 @@ export function LandingPage() {
                 step: "01",
                 icon: Camera,
                 title: "El supervisor reporta",
-                desc: "Desde WhatsApp manda fotos del trabajo y una descripción corta. El sistema crea el registro automáticamente.",
+                desc: "Desde Telegram manda fotos del trabajo y una descripción corta. El sistema crea el registro automáticamente.",
               },
               {
                 step: "02",
@@ -451,14 +451,14 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ════════ WHATSAPP DEMO ════════ */}
+      {/* ════════ TELEGRAM DEMO ════════ */}
       <section className="bg-white py-24 md:py-32">
         <div className="mx-auto max-w-6xl px-6">
           <div className="grid grid-cols-1 items-center gap-16 md:grid-cols-2">
             <FadeIn>
               <div>
                 <span className="text-sm font-semibold uppercase tracking-widest text-green-600">
-                  WhatsApp Bot
+                  Telegram Bot
                 </span>
                 <h2
                   className="mt-4 text-4xl text-slate-900 md:text-5xl"
@@ -466,7 +466,7 @@ export function LandingPage() {
                 >
                   Tu supervisor ya sabe
                   <br />
-                  <span className="italic text-slate-400">usar WhatsApp.</span>
+                  <span className="italic text-slate-400">usar Telegram.</span>
                 </h2>
                 <p className="mt-6 text-lg leading-relaxed text-slate-500">
                   No necesita descargar nada. No necesita capacitación.
@@ -583,10 +583,10 @@ export function LandingPage() {
                     {[
                       "Supervisores ilimitados",
                       "Edificios ilimitados",
-                      "Bot de WhatsApp incluido",
+                      "Bot de Telegram incluido",
                       "Reportes con IA incluidos",
                       "Envío de emails ilimitado",
-                      "Soporte por WhatsApp",
+                      "Soporte por Telegram",
                       "Almacenamiento de fotos ilimitado",
                     ].map((f) => (
                       <div key={f} className="flex items-center gap-3">
@@ -628,12 +628,12 @@ export function LandingPage() {
                 {
                   icon: Zap,
                   title: "Siempre disponible",
-                  desc: "99.9% de uptime garantizado. El bot de WhatsApp funciona 24/7, y el panel web está disponible desde cualquier dispositivo.",
+                  desc: "99.9% de uptime garantizado. El bot de Telegram funciona 24/7, y el panel web está disponible desde cualquier dispositivo.",
                 },
                 {
                   icon: MessageSquare,
                   title: "Soporte humano",
-                  desc: "Equipo de soporte real por WhatsApp. Te ayudamos a configurar todo y a capacitar a tu equipo sin costo extra.",
+                  desc: "Equipo de soporte real por Telegram. Te ayudamos a configurar todo y a capacitar a tu equipo sin costo extra.",
                 },
               ].map((t) => (
                 <div

@@ -6,6 +6,8 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY") || "";
+const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") || "";
+const TELEGRAM_API_BASE = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 
 // ── Types ──
 
@@ -17,124 +19,74 @@ interface Session {
   updated_at: string;
 }
 
-interface TwilioMessage {
-  From: string;
-  Body: string;
-  NumMedia: string;
-  MediaUrl0?: string;
-  MediaUrl1?: string;
-  MediaUrl2?: string;
-  MediaUrl3?: string;
-  MediaUrl4?: string;
-  MediaUrl5?: string;
-  MediaUrl6?: string;
-  MediaUrl7?: string;
-  MediaUrl8?: string;
-  MediaUrl9?: string;
-  MediaContentType0?: string;
-  MediaContentType1?: string;
-  MediaContentType2?: string;
-}
+// ── Telegram Bot API helpers ──
 
-// ── Helpers ──
-
-function twiml(message: string): Response {
-  const xml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escapeXml(message)}</Message></Response>`;
-  return new Response(xml, {
-    headers: { "Content-Type": "text/xml" },
+async function sendTelegramMessage(chatId: string | number, text: string): Promise<void> {
+  const resp = await fetch(`${TELEGRAM_API_BASE}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      parse_mode: "Markdown",
+    }),
   });
-}
 
-function escapeXml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function parseFormData(body: string): Record<string, string> {
-  const params: Record<string, string> = {};
-  for (const pair of body.split("&")) {
-    const [key, val] = pair.split("=");
-    if (key && val !== undefined) {
-      params[decodeURIComponent(key)] = decodeURIComponent(val.replace(/\+/g, " "));
-    }
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error("Failed to send Telegram message:", resp.status, errText);
   }
-  return params;
 }
 
-function getMediaUrls(msg: TwilioMessage): string[] {
-  const urls: string[] = [];
-  const count = parseInt(msg.NumMedia || "0", 10);
-  for (let i = 0; i < count; i++) {
-    const url = (msg as Record<string, string>)[`MediaUrl${i}`];
-    if (url) urls.push(url);
-  }
-  return urls;
+async function getTelegramFileUrl(fileId: string): Promise<string | null> {
+  const resp = await fetch(`${TELEGRAM_API_BASE}/getFile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file_id: fileId }),
+  });
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  const filePath = data.result?.file_path;
+  if (!filePath) return null;
+  return `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${filePath}`;
 }
 
-function getMediaContentTypes(msg: TwilioMessage): string[] {
-  const types: string[] = [];
-  const count = parseInt(msg.NumMedia || "0", 10);
-  for (let i = 0; i < count; i++) {
-    const ct = (msg as Record<string, string>)[`MediaContentType${i}`];
-    types.push(ct || "");
-  }
-  return types;
-}
-
-function isAudioContentType(ct: string): boolean {
-  return ct.startsWith("audio/");
-}
-
-function isImageContentType(ct: string): boolean {
-  return ct.startsWith("image/");
+async function downloadTelegramFile(url: string): Promise<{ blob: Blob; contentType: string } | null> {
+  const resp = await fetch(url);
+  if (!resp.ok) return null;
+  const contentType = resp.headers.get("content-type") || "application/octet-stream";
+  const blob = await resp.blob();
+  return { blob, contentType };
 }
 
 // ── Audio transcription via Groq Whisper ──
 
-async function transcribeAudio(mediaUrl: string): Promise<string> {
+async function transcribeAudio(fileId: string): Promise<string> {
   try {
     if (!GROQ_API_KEY) {
       return "[No se pudo transcribir el audio: API no configurada]";
     }
 
-    const twilioSid = Deno.env.get("TWILIO_ACCOUNT_SID") || "";
-    const twilioToken = Deno.env.get("TWILIO_AUTH_TOKEN") || "";
-    const authHeader = "Basic " + btoa(`${twilioSid}:${twilioToken}`);
+    const fileUrl = await getTelegramFileUrl(fileId);
+    if (!fileUrl) return "[No se pudo obtener el audio]";
 
-    // Download audio from Twilio
-    const audioResp = await fetch(mediaUrl, {
-      headers: { Authorization: authHeader },
-    });
+    const media = await downloadTelegramFile(fileUrl);
+    if (!media) return "[No se pudo descargar el audio]";
 
-    if (!audioResp.ok) {
-      console.error("Failed to download audio from Twilio:", audioResp.status);
-      return "[No se pudo descargar el audio]";
-    }
-
-    const contentType = audioResp.headers.get("content-type") || "audio/ogg";
-    const audioBlob = await audioResp.blob();
-
-    // Determine file extension
     let ext = "ogg";
-    if (contentType.includes("mpeg") || contentType.includes("mp3")) ext = "mp3";
-    else if (contentType.includes("mp4") || contentType.includes("m4a")) ext = "m4a";
-    else if (contentType.includes("wav")) ext = "wav";
-    else if (contentType.includes("webm")) ext = "webm";
+    if (media.contentType.includes("mpeg") || media.contentType.includes("mp3")) ext = "mp3";
+    else if (media.contentType.includes("mp4") || media.contentType.includes("m4a")) ext = "m4a";
+    else if (media.contentType.includes("wav")) ext = "wav";
+    else if (media.contentType.includes("webm")) ext = "webm";
 
-    // Send to Groq Whisper API
     const formData = new FormData();
-    formData.append("file", new File([audioBlob], `audio.${ext}`, { type: contentType }));
+    formData.append("file", new File([media.blob], `audio.${ext}`, { type: media.contentType }));
     formData.append("model", "whisper-large-v3");
     formData.append("language", "es");
 
     const groqResp = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-      },
+      headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
       body: formData,
     });
 
@@ -146,12 +98,7 @@ async function transcribeAudio(mediaUrl: string): Promise<string> {
 
     const result = await groqResp.json();
     const text = (result.text || "").trim();
-
-    if (!text) {
-      return "[Audio vacío o no se detectó habla]";
-    }
-
-    return text;
+    return text || "[Audio vacío o no se detectó habla]";
   } catch (error) {
     console.error("transcribeAudio error:", error);
     return "[Error al transcribir el audio. Intentá enviar un mensaje de texto.]";
@@ -160,28 +107,24 @@ async function transcribeAudio(mediaUrl: string): Promise<string> {
 
 // ── Media upload ──
 
-async function uploadMediaFromUrl(
-  url: string,
+async function uploadMediaFromTelegram(
+  fileId: string,
   folder: string,
   subfolder: string
 ): Promise<string | null> {
   try {
-    const twilioSid = Deno.env.get("TWILIO_ACCOUNT_SID") || "";
-    const twilioToken = Deno.env.get("TWILIO_AUTH_TOKEN") || "";
-    const authHeader = "Basic " + btoa(`${twilioSid}:${twilioToken}`);
-    const resp = await fetch(url, {
-      headers: { Authorization: authHeader },
-    });
-    if (!resp.ok) return null;
+    const fileUrl = await getTelegramFileUrl(fileId);
+    if (!fileUrl) return null;
 
-    const contentType = resp.headers.get("content-type") || "image/jpeg";
-    const ext = contentType.includes("png") ? "png" : "jpg";
-    const blob = await resp.blob();
+    const media = await downloadTelegramFile(fileUrl);
+    if (!media) return null;
+
+    const ext = media.contentType.includes("png") ? "png" : "jpg";
     const path = `${folder}/${subfolder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
     const { error } = await supabase.storage
       .from("media")
-      .upload(path, blob, { contentType });
+      .upload(path, media.blob, { contentType: media.contentType });
 
     if (error) return null;
 
@@ -203,7 +146,7 @@ function formatDate(d: string): string {
 
 async function getOrCreateSession(entityId: string): Promise<Session> {
   const { data } = await supabase
-    .from("whatsapp_sessions")
+    .from("telegram_sessions")
     .select("*")
     .eq("entity_id", entityId)
     .single();
@@ -211,7 +154,7 @@ async function getOrCreateSession(entityId: string): Promise<Session> {
   if (data) return data as Session;
 
   const { data: created } = await supabase
-    .from("whatsapp_sessions")
+    .from("telegram_sessions")
     .insert({ entity_id: entityId, state: "idle", context: {} })
     .select()
     .single();
@@ -225,7 +168,7 @@ async function updateSession(
   context: Record<string, unknown>
 ): Promise<void> {
   await supabase
-    .from("whatsapp_sessions")
+    .from("telegram_sessions")
     .update({ state, context, updated_at: new Date().toISOString() })
     .eq("entity_id", entityId);
 }
@@ -374,12 +317,15 @@ async function handleSupNewJobPhotos(
   supervisorId: string,
   body: string,
   ctx: Record<string, unknown>,
-  mediaUrls: string[]
+  photoFileIds: string[]
 ): Promise<string> {
   const photos = (ctx.photo_urls as string[]) || [];
 
-  if (mediaUrls.length > 0) {
-    photos.push(...mediaUrls);
+  if (photoFileIds.length > 0) {
+    for (const fileId of photoFileIds) {
+      const publicUrl = await uploadMediaFromTelegram(fileId, "incoming", "photos");
+      if (publicUrl) photos.push(publicUrl);
+    }
     await updateSession(supervisorId, "sup_new_job_photos", {
       ...ctx,
       photo_urls: photos,
@@ -430,15 +376,13 @@ async function handleSupNewJobDescription(
     return `❌ Error al crear el trabajo.\n\n${buildingMenu(buildingName)}`;
   }
 
+  // Photos are already uploaded to Supabase storage, just create media records
   for (const url of photoUrls) {
-    const publicUrl = await uploadMediaFromUrl(url, `jobs/${job.id}`, "before");
-    if (publicUrl) {
-      await supabase.from("media").insert({
-        job_id: job.id,
-        type: "before",
-        url: publicUrl,
-      });
-    }
+    await supabase.from("media").insert({
+      job_id: job.id,
+      type: "before",
+      url,
+    });
   }
 
   await updateSession(supervisorId, "sup_building_menu", {
@@ -476,12 +420,15 @@ async function handleSupCompleteJobPhotos(
   supervisorId: string,
   body: string,
   ctx: Record<string, unknown>,
-  mediaUrls: string[]
+  photoFileIds: string[]
 ): Promise<string> {
   const photos = (ctx.photo_urls as string[]) || [];
 
-  if (mediaUrls.length > 0) {
-    photos.push(...mediaUrls);
+  if (photoFileIds.length > 0) {
+    for (const fileId of photoFileIds) {
+      const publicUrl = await uploadMediaFromTelegram(fileId, "incoming", "photos");
+      if (publicUrl) photos.push(publicUrl);
+    }
     await updateSession(supervisorId, "sup_complete_job_photos", {
       ...ctx,
       photo_urls: photos,
@@ -491,15 +438,13 @@ async function handleSupCompleteJobPhotos(
 
   if (body.trim().toUpperCase() === "LISTO") {
     const jobId = ctx.job_id as string;
+    // Photos already uploaded, just create media records
     for (const url of photos) {
-      const publicUrl = await uploadMediaFromUrl(url, `jobs/${jobId}`, "after");
-      if (publicUrl) {
-        await supabase.from("media").insert({
-          job_id: jobId,
-          type: "after",
-          url: publicUrl,
-        });
-      }
+      await supabase.from("media").insert({
+        job_id: jobId,
+        type: "after",
+        url,
+      });
     }
 
     await updateSession(supervisorId, "sup_complete_job_expense", {
@@ -808,17 +753,20 @@ async function handleTenantNewPhotos(
   tenantId: string,
   body: string,
   ctx: Record<string, unknown>,
-  mediaUrls: string[]
+  photoFileIds: string[]
 ): Promise<string> {
   const photos = (ctx.photo_urls as string[]) || [];
 
-  if (body.trim() === "0" && mediaUrls.length === 0) {
+  if (body.trim() === "0" && photoFileIds.length === 0) {
     await updateSession(tenantId, "tenant_new_urgency", ctx);
     return "⚠️ *Urgencia:*\n\n1. Baja - puede esperar\n2. Normal\n3. Urgente - necesita atención inmediata\n\n_Respondé con el número o *0* para volver._";
   }
 
-  if (mediaUrls.length > 0) {
-    photos.push(...mediaUrls);
+  if (photoFileIds.length > 0) {
+    for (const fileId of photoFileIds) {
+      const publicUrl = await uploadMediaFromTelegram(fileId, "incoming", "request-photos");
+      if (publicUrl) photos.push(publicUrl);
+    }
     await updateSession(tenantId, "tenant_new_photos", {
       ...ctx,
       photo_urls: photos,
@@ -855,13 +803,10 @@ async function handleTenantNewPhotos(
     }
 
     for (const url of photos) {
-      const publicUrl = await uploadMediaFromUrl(url, `requests/${request.id}`, "photos");
-      if (publicUrl) {
-        await supabase.from("request_media").insert({
-          request_id: request.id,
-          url: publicUrl,
-        });
-      }
+      await supabase.from("request_media").insert({
+        request_id: request.id,
+        url,
+      });
     }
 
     await updateSession(tenantId, "tenant_menu", {
@@ -887,31 +832,53 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const bodyText = await req.text();
-    const msg = parseFormData(bodyText) as unknown as TwilioMessage;
-    const phone = msg.From?.replace("whatsapp:", "") || "";
-    let body = msg.Body || "";
-    const mediaUrls = getMediaUrls(msg);
-    const mediaTypes = getMediaContentTypes(msg);
+    const update = await req.json();
+
+    // Telegram sends updates with a message object
+    const message = update.message;
+    if (!message) {
+      return new Response("OK", { status: 200 });
+    }
+
+    const chatId = message.chat.id;
+    const phone = message.contact?.phone_number || null;
+
+    // We identify users by their Telegram chat ID stored in phone_number field
+    // Telegram chat IDs are numeric, stored as string in phone_number
+    const telegramId = String(chatId);
+
+    // Extract text body and media
+    let body = "";
+    const photoFileIds: string[] = [];
+    let audioFileId: string | null = null;
+
+    if (message.text) {
+      body = message.text;
+    }
+
+    if (message.photo) {
+      // Telegram sends multiple sizes, pick the largest (last one)
+      const largestPhoto = message.photo[message.photo.length - 1];
+      photoFileIds.push(largestPhoto.file_id);
+      body = message.caption || "";
+    }
+
+    if (message.voice) {
+      audioFileId = message.voice.file_id;
+    }
+
+    if (message.audio) {
+      audioFileId = message.audio.file_id;
+    }
 
     // ── Audio transcription ──
-    // If any media is audio, transcribe it and use as the text body
-    const imageUrls: string[] = [];
-    for (let i = 0; i < mediaUrls.length; i++) {
-      const ct = mediaTypes[i] || "";
-      if (isAudioContentType(ct)) {
-        // Transcribe audio → use as text body
-        const transcribed = await transcribeAudio(mediaUrls[i]!);
-        if (transcribed && !transcribed.startsWith("[")) {
-          // Successful transcription — use as body text
-          body = transcribed;
-          console.log(`Audio transcribed: "${transcribed.substring(0, 100)}"`);
-        } else {
-          // Failed transcription — still pass through as body so user sees the error
-          if (!body) body = transcribed;
-        }
-      } else if (isImageContentType(ct)) {
-        imageUrls.push(mediaUrls[i]!);
+    if (audioFileId) {
+      const transcribed = await transcribeAudio(audioFileId);
+      if (transcribed && !transcribed.startsWith("[")) {
+        body = transcribed;
+        console.log(`Audio transcribed: "${transcribed.substring(0, 100)}"`);
+      } else {
+        if (!body) body = transcribed;
       }
     }
 
@@ -919,19 +886,21 @@ Deno.serve(async (req) => {
     const { data: supervisor } = await supabase
       .from("supervisors")
       .select("id")
-      .eq("phone_number", phone)
+      .eq("phone_number", telegramId)
       .single();
 
     const { data: tenant } = await supabase
       .from("tenants")
       .select("id, building_id, name")
-      .eq("phone_number", phone)
+      .eq("phone_number", telegramId)
       .single();
 
     if (!supervisor && !tenant) {
-      return twiml(
-        "❌ Tu número no está registrado en Consorcia.\n\nSi sos inquilino o supervisor, pedile al administrador que te registre."
+      await sendTelegramMessage(
+        chatId,
+        "❌ Tu cuenta de Telegram no está registrada en Consorcia.\n\nSi sos inquilino o supervisor, pedile al administrador que te registre con tu ID: `" + telegramId + "`"
       );
+      return new Response("OK", { status: 200 });
     }
 
     // If both supervisor and tenant, check for role selection session or ask
@@ -939,19 +908,17 @@ Deno.serve(async (req) => {
     let entityId: string;
 
     if (supervisor && tenant) {
-      // Check if there's an existing session for either role
       const { data: supSession } = await supabase
-        .from("whatsapp_sessions")
+        .from("telegram_sessions")
         .select("entity_id, state")
         .eq("entity_id", supervisor.id)
         .single();
       const { data: tenantSession } = await supabase
-        .from("whatsapp_sessions")
+        .from("telegram_sessions")
         .select("entity_id, state")
         .eq("entity_id", tenant.id)
         .single();
 
-      // If one has an active (non-idle) session, use that
       if (supSession && supSession.state !== "idle" && (!tenantSession || tenantSession.state === "idle")) {
         isSupervisor = true;
         entityId = supervisor.id;
@@ -967,10 +934,11 @@ Deno.serve(async (req) => {
         entityId = tenant.id;
         await updateSession(entityId, "idle", {});
       } else {
-        // Neither has active session and no role selected — ask
-        return twiml(
-          "👋 Hola! Tu número está registrado como *supervisor* e *inquilino*.\n\n*S* — Entrar como supervisor\n*I* — Entrar como inquilino\n\n_Respondé con la letra_"
+        await sendTelegramMessage(
+          chatId,
+          "👋 Hola! Tu cuenta está registrada como *supervisor* e *inquilino*.\n\n*S* — Entrar como supervisor\n*I* — Entrar como inquilino\n\n_Respondé con la letra_"
         );
+        return new Response("OK", { status: 200 });
       }
     } else {
       entityId = supervisor ? supervisor.id : tenant!.id;
@@ -986,17 +954,18 @@ Deno.serve(async (req) => {
       await updateSession(entityId, "idle", {});
       if (isSupervisor) {
         const reply = await handleSupervisorIdle(entityId, body);
-        return twiml(reply);
+        await sendTelegramMessage(chatId, reply);
+        return new Response("OK", { status: 200 });
       } else {
         const reply = await handleTenantIdle(entityId, tenant!);
-        return twiml(reply);
+        await sendTelegramMessage(chatId, reply);
+        return new Response("OK", { status: 200 });
       }
     }
 
     let reply: string;
 
     if (isSupervisor) {
-      // Use only image URLs for supervisor photo states
       switch (session.state) {
         case "idle":
           reply = await handleSupervisorIdle(entityId, body);
@@ -1008,7 +977,7 @@ Deno.serve(async (req) => {
           reply = await handleSupBuildingMenu(entityId, body, ctx);
           break;
         case "sup_new_job_photos":
-          reply = await handleSupNewJobPhotos(entityId, body, ctx, imageUrls);
+          reply = await handleSupNewJobPhotos(entityId, body, ctx, photoFileIds);
           break;
         case "sup_new_job_description":
           reply = await handleSupNewJobDescription(entityId, body, ctx);
@@ -1017,7 +986,7 @@ Deno.serve(async (req) => {
           reply = await handleSupCompleteSelectJob(entityId, body, ctx);
           break;
         case "sup_complete_job_photos":
-          reply = await handleSupCompleteJobPhotos(entityId, body, ctx, imageUrls);
+          reply = await handleSupCompleteJobPhotos(entityId, body, ctx, photoFileIds);
           break;
         case "sup_complete_job_expense":
           reply = await handleSupCompleteJobExpense(entityId, body, ctx);
@@ -1031,26 +1000,11 @@ Deno.serve(async (req) => {
         case "sup_expense_category":
           reply = await handleSupExpenseCategory(entityId, body, ctx);
           break;
-        // Legacy states — treat as idle
-        case "select_building":
-        case "building_menu":
-        case "new_job_photos":
-        case "new_job_description":
-        case "complete_select_job":
-        case "complete_job_photos":
-        case "complete_job_expense":
-        case "complete_job_expense_amount":
-        case "complete_job_expense_provider":
-        case "complete_job_expense_category":
-          await updateSession(entityId, "idle", {});
-          reply = await handleSupervisorIdle(entityId, body);
-          break;
         default:
           await updateSession(entityId, "idle", {});
           reply = await handleSupervisorIdle(entityId, body);
       }
     } else {
-      // Tenant flow — use only image URLs for photo states
       switch (session.state) {
         case "idle":
           reply = await handleTenantIdle(entityId, tenant!);
@@ -1068,7 +1022,7 @@ Deno.serve(async (req) => {
           reply = await handleTenantNewUrgency(entityId, body, ctx);
           break;
         case "tenant_new_photos":
-          reply = await handleTenantNewPhotos(entityId, body, ctx, imageUrls);
+          reply = await handleTenantNewPhotos(entityId, body, ctx, photoFileIds);
           break;
         default:
           await updateSession(entityId, "idle", {});
@@ -1076,9 +1030,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    return twiml(reply);
+    await sendTelegramMessage(chatId, reply);
+    return new Response("OK", { status: 200 });
   } catch (error) {
     console.error("Webhook error:", error);
-    return twiml("❌ Ocurrió un error. Intentá de nuevo.");
+    return new Response("OK", { status: 200 });
   }
 });

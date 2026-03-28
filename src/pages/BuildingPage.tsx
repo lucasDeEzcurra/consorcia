@@ -491,7 +491,7 @@ export function BuildingPage() {
               <EmptyState
                 icon={MessageCircle}
                 message="No hay reclamos"
-                description="Los reclamos de inquilinos por WhatsApp aparecerán acá."
+                description="Los reclamos de inquilinos por Telegram aparecerán acá."
               />
             ) : (
               <div className="space-y-2">

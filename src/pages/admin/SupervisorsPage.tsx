@@ -181,7 +181,7 @@ export function SupervisorsPage() {
               <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Juan Pérez" className="h-10 rounded-xl" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Teléfono (WhatsApp)</label>
+              <label className="text-sm font-medium text-slate-700">Telegram ID</label>
               <Input value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="+5491112345678" className="h-10 rounded-xl" />
             </div>
             <div className="space-y-1.5">

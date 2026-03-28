@@ -1,9 +1,9 @@
 /**
- * Intent parser for supervisor WhatsApp messages.
+ * Intent parser for supervisor Telegram messages.
  * Uses Groq LLM (llama-3.3-70b-versatile) to extract structured intent from free-text messages.
  *
  * This module is the canonical source of truth for the parsing logic.
- * The same logic is replicated in the whatsapp-webhook edge function (Deno runtime).
+ * The same logic is replicated in the telegram-webhook edge function (Deno runtime).
  */
 
 export interface Building {

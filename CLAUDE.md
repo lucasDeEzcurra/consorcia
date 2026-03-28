@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Antes de cualquier tarea, leé INSTRUCTIONS.md que tiene la spec completa del producto con entidades, reglas de negocio, flujos de WhatsApp, estructura de reportes y prioridades.
+Antes de cualquier tarea, leé INSTRUCTIONS.md que tiene la spec completa del producto con entidades, reglas de negocio, flujos de Telegram, estructura de reportes y prioridades.
 
 ## Stack
 
@@ -36,7 +36,7 @@ App para administradoras de consorcios/edificios en Argentina.
 
 **Jerarquía de datos**: Administración → Supervisores → Edificios → Propietarios
 
-**Flujo principal**: Los supervisores envían fotos de arreglos por WhatsApp, se guardan organizadas por edificio, y a fin de mes se genera un reporte PDF que se envía por email a los propietarios.
+**Flujo principal**: Los supervisores envían fotos de arreglos por Telegram, se guardan organizadas por edificio, y a fin de mes se genera un reporte PDF que se envía por email a los propietarios.
 
 ## Code Conventions
 

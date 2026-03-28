@@ -488,7 +488,7 @@ export function AdminBuildingDetailPage() {
           <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center">
             <Users className="mx-auto size-8 text-slate-300" />
             <p className="mt-2 text-sm text-slate-500">Sin inquilinos registrados.</p>
-            <p className="mt-1 text-xs text-slate-400">Agregá inquilinos para que puedan usar el bot de WhatsApp.</p>
+            <p className="mt-1 text-xs text-slate-400">Agregá inquilinos para que puedan usar el bot de Telegram.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -642,7 +642,7 @@ export function AdminBuildingDetailPage() {
               <Input value={tenantName} onChange={(e) => setTenantName(e.target.value)} required placeholder="María García" className="h-10 rounded-xl" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Teléfono (WhatsApp)</label>
+              <label className="text-sm font-medium text-slate-700">Telegram ID</label>
               <Input value={tenantPhone} onChange={(e) => setTenantPhone(e.target.value)} required placeholder="+5491156789012" className="h-10 rounded-xl" />
             </div>
             <div className="space-y-1.5">

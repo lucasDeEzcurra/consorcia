@@ -1,11 +1,11 @@
 /**
- * Bot Router — the brain of the WhatsApp supervisor bot.
+ * Bot Router — the brain of the Telegram supervisor bot.
  *
  * Handles free-form messages using intent parsing (Groq LLM) and
- * manages conversational state via whatsapp_sessions in Supabase.
+ * manages conversational state via telegram_sessions in Supabase.
  *
  * This is the canonical source of truth for the bot logic.
- * The edge function (whatsapp-webhook) replicates this logic in Deno runtime.
+ * The edge function (telegram-webhook) replicates this logic in Deno runtime.
  */
 
 import { supabase } from "./supabase";
@@ -44,7 +44,7 @@ const GROQ_API_KEY = "";
 
 async function getSession(supervisorId: string): Promise<Session> {
   const { data } = await supabase
-    .from("whatsapp_sessions")
+    .from("telegram_sessions")
     .select("*")
     .eq("supervisor_id", supervisorId)
     .single();
@@ -52,7 +52,7 @@ async function getSession(supervisorId: string): Promise<Session> {
   if (data) return data as Session;
 
   const { data: created } = await supabase
-    .from("whatsapp_sessions")
+    .from("telegram_sessions")
     .insert({
       supervisor_id: supervisorId,
       state: "idle",
@@ -70,7 +70,7 @@ async function updateSession(
   updates: Partial<Pick<Session, "state" | "context" | "active_building_id" | "active_building_name" | "pending_media" | "pending_description" | "last_intent" | "pending_job_id">>
 ): Promise<void> {
   await supabase
-    .from("whatsapp_sessions")
+    .from("telegram_sessions")
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq("supervisor_id", supervisorId);
 }
@@ -105,7 +105,7 @@ async function uploadMediaFromUrl(
   jobId: string,
   type: "before" | "after"
 ): Promise<string | null> {
-  // This is a placeholder — in the edge function, this downloads from Twilio
+  // This is a placeholder — in the edge function, this downloads from Telegram Bot API
   // and uploads to Supabase Storage. Here it's for reference/testing.
   // The actual implementation lives in the edge function.
   try {

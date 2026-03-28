@@ -193,7 +193,7 @@ export function SupervisorDetailPage() {
           <Input value={name} onChange={(e) => setName(e.target.value)} required className="h-10 rounded-xl" />
         </div>
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-slate-500">Teléfono (WhatsApp)</label>
+          <label className="text-xs font-medium text-slate-500">Telegram ID</label>
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} required className="h-10 rounded-xl" />
         </div>
         <Button type="submit" size="sm" disabled={saving} className="rounded-xl bg-amber-500 text-[#0b1120] hover:bg-amber-400">

@@ -84,7 +84,7 @@ export function LoginPage() {
             <span className="italic text-amber-400">de forma profesional.</span>
           </h2>
           <p className="mt-4 max-w-md text-base leading-relaxed text-slate-400">
-            WhatsApp, fotos, reportes con IA y envío por email.
+            Telegram, fotos, reportes con IA y envío por email.
             Todo en un solo lugar.
           </p>
         </div>
