@@ -79,107 +79,115 @@ export function ReportPage() {
   const fetchData = useCallback(async () => {
     if (!id) return;
 
-    const { data: bData } = await supabase
-      .from("buildings")
-      .select("*")
-      .eq("id", id)
-      .single();
-    const bld = bData as Building | null;
-    setBuilding(bld);
+    try {
+      const { data: bData } = await supabase
+        .from("buildings")
+        .select("*")
+        .eq("id", id)
+        .single();
+      const bld = bData as Building | null;
+      setBuilding(bld);
 
-    if (!bld) return;
-
-    // Fetch report — use .maybeSingle() to avoid error on 0 rows
-    const { data: rData } = await supabase
-      .from("reports")
-      .select("*")
-      .eq("building_id", id)
-      .eq("month", month)
-      .maybeSingle();
-
-    if (rData) {
-      setExistingReport(rData as Report);
-    }
-
-    const monthStart = `${month}-01T00:00:00.000Z`;
-    const [y, m] = month.split("-");
-    const nextMonth = new Date(Number(y), Number(m), 1).toISOString();
-
-    const { data: jData } = await supabase
-      .from("jobs")
-      .select("*")
-      .eq("building_id", id)
-      .eq("status", "completed")
-      .gte("completed_at", monthStart)
-      .lt("completed_at", nextMonth)
-      .order("completed_at");
-
-    const jobsList = (jData as Job[]) ?? [];
-
-    const jobIds = jobsList.map((j) => j.id);
-    const { data: mData } = await supabase
-      .from("media")
-      .select("*")
-      .in("job_id", jobIds.length > 0 ? jobIds : ["__none__"])
-      .order("created_at");
-
-    const mediaList = (mData as Media[]) ?? [];
-    const mediaByJob = new Map<string, Media[]>();
-    for (const m of mediaList) {
-      const arr = mediaByJob.get(m.job_id) ?? [];
-      arr.push(m);
-      mediaByJob.set(m.job_id, arr);
-    }
-
-    const jobsWithMedia: JobWithMedia[] = jobsList.map((j) => ({
-      ...j,
-      media: mediaByJob.get(j.id) ?? [],
-      improved_description: j.description_generated ?? j.description_original,
-    }));
-
-    setJobs(jobsWithMedia);
-
-    setRecipients(bld.emails);
-    setEmailSubject(
-      `Informe de Gestión Mensual — ${bld.name} — ${formatMonthLabel(month)}`
-    );
-    setEmailMessage(
-      `Estimados propietarios,\n\nAdjuntamos el informe de gestión mensual correspondiente a ${formatMonthLabel(month)} del edificio ${bld.name}.\n\nQuedamos a disposición ante cualquier consulta.\n\nSaludos cordiales.`
-    );
-
-    // If report already exists (draft or sent), load saved text — don't regenerate
-    if (rData) {
-      const report = rData as Report;
-      if (report.generated_text) {
-        try {
-          const parsed = JSON.parse(report.generated_text);
-          setSummary(parsed.summary ?? "");
-          setClosing(parsed.closing ?? "");
-          if (parsed.improved_descriptions) {
-            for (let i = 0; i < jobsWithMedia.length; i++) {
-              if (parsed.improved_descriptions[i]) {
-                jobsWithMedia[i]!.improved_description =
-                  parsed.improved_descriptions[i];
-              }
-            }
-            setJobs([...jobsWithMedia]);
-          }
-        } catch {
-          setSummary(report.generated_text);
-        }
-      } else {
-        // Report exists but no saved text — use fallback
-        setSummary(
-          `Durante ${formatMonthLabel(month)} se completaron ${jobsWithMedia.length} trabajo${jobsWithMedia.length !== 1 ? "s" : ""} de mantenimiento en ${bld.name}.`
-        );
-        setClosing("Quedamos a disposición para cualquier consulta o requerimiento.");
+      if (!bld) {
+        setStep("preview");
+        return;
       }
-      setStep("preview");
-      return;
-    }
 
-    // No report exists yet — generate with AI
-    await generateAiText(bld, jobsWithMedia);
+      // Fetch report — use .maybeSingle() to avoid error on 0 rows
+      const { data: rData } = await supabase
+        .from("reports")
+        .select("*")
+        .eq("building_id", id)
+        .eq("month", month)
+        .maybeSingle();
+
+      if (rData) {
+        setExistingReport(rData as Report);
+      }
+
+      const monthStart = `${month}-01T00:00:00.000Z`;
+      const [y, m] = month.split("-");
+      const nextMonth = new Date(Number(y), Number(m), 1).toISOString();
+
+      const { data: jData } = await supabase
+        .from("jobs")
+        .select("*")
+        .eq("building_id", id)
+        .eq("status", "completed")
+        .gte("completed_at", monthStart)
+        .lt("completed_at", nextMonth)
+        .order("completed_at");
+
+      const jobsList = (jData as Job[]) ?? [];
+
+      const jobIds = jobsList.map((j) => j.id);
+      const { data: mData } = await supabase
+        .from("media")
+        .select("*")
+        .in("job_id", jobIds.length > 0 ? jobIds : ["__none__"])
+        .order("created_at");
+
+      const mediaList = (mData as Media[]) ?? [];
+      const mediaByJob = new Map<string, Media[]>();
+      for (const m of mediaList) {
+        const arr = mediaByJob.get(m.job_id) ?? [];
+        arr.push(m);
+        mediaByJob.set(m.job_id, arr);
+      }
+
+      const jobsWithMedia: JobWithMedia[] = jobsList.map((j) => ({
+        ...j,
+        media: mediaByJob.get(j.id) ?? [],
+        improved_description: j.description_generated ?? j.description_original,
+      }));
+
+      setJobs(jobsWithMedia);
+
+      setRecipients(bld.emails);
+      setEmailSubject(
+        `Informe de Gestión Mensual — ${bld.name} — ${formatMonthLabel(month)}`
+      );
+      setEmailMessage(
+        `Estimados propietarios,\n\nAdjuntamos el informe de gestión mensual correspondiente a ${formatMonthLabel(month)} del edificio ${bld.name}.\n\nQuedamos a disposición ante cualquier consulta.\n\nSaludos cordiales.`
+      );
+
+      // If report already exists (draft or sent), load saved text — don't regenerate
+      if (rData) {
+        const report = rData as Report;
+        if (report.generated_text) {
+          try {
+            const parsed = JSON.parse(report.generated_text);
+            setSummary(parsed.summary ?? "");
+            setClosing(parsed.closing ?? "");
+            if (parsed.improved_descriptions) {
+              for (let i = 0; i < jobsWithMedia.length; i++) {
+                if (parsed.improved_descriptions[i]) {
+                  jobsWithMedia[i]!.improved_description =
+                    parsed.improved_descriptions[i];
+                }
+              }
+              setJobs([...jobsWithMedia]);
+            }
+          } catch {
+            setSummary(report.generated_text);
+          }
+        } else {
+          // Report exists but no saved text — use fallback
+          setSummary(
+            `Durante ${formatMonthLabel(month)} se completaron ${jobsWithMedia.length} trabajo${jobsWithMedia.length !== 1 ? "s" : ""} de mantenimiento en ${bld.name}.`
+          );
+          setClosing("Quedamos a disposición para cualquier consulta o requerimiento.");
+        }
+        setStep("preview");
+        return;
+      }
+
+      // No report exists yet — generate with AI
+      await generateAiText(bld, jobsWithMedia);
+    } catch (err) {
+      console.error("ReportPage fetch error:", err);
+      setStep("preview");
+    }
   }, [id, month]);
 
   const generateAiText = async (

@@ -56,17 +56,28 @@ export function InsightsPanel({ supervisorId }: Props) {
 
   const load = async () => {
     setLoading(true);
-    const result = await generateInsights(supervisorId);
-    setInsights(result);
-    setLoading(false);
+    try {
+      const result = await generateInsights(supervisorId);
+      setInsights(result);
+    } catch (err) {
+      console.error("Insights load error:", err);
+      setInsights([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const regenerate = async () => {
     setRegenerating(true);
-    await clearInsightsCache(supervisorId);
-    const result = await generateInsights(supervisorId);
-    setInsights(result);
-    setRegenerating(false);
+    try {
+      await clearInsightsCache(supervisorId);
+      const result = await generateInsights(supervisorId);
+      setInsights(result);
+    } catch (err) {
+      console.error("Insights regenerate error:", err);
+    } finally {
+      setRegenerating(false);
+    }
   };
 
   useEffect(() => {

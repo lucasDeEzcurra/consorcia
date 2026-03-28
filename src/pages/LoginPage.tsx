@@ -7,14 +7,14 @@ const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 const sans = { fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" };
 
 export function LoginPage() {
-  const { session, role, loading, signIn } = useAuth();
+  const { session, role, loading, signIn, signOut } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Loading or signed in with role → redirect
-  if (loading || (session && !role)) {
+  // Still initializing auth — show spinner
+  if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0b1120]">
         <Loader2 className="size-6 animate-spin text-amber-500" />
@@ -22,9 +22,21 @@ export function LoginPage() {
     );
   }
 
+  // Signed in with a valid role → redirect to dashboard
   if (session && role) {
     const redirect = role === "admin" ? "/admin/dashboard" : "/dashboard";
     return <Navigate to={redirect} replace />;
+  }
+
+  // Session exists but no role → user_profiles row missing or fetch failed.
+  // Sign them out so they don't get stuck in a loading loop.
+  if (session && !role) {
+    signOut();
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0b1120]">
+        <Loader2 className="size-6 animate-spin text-amber-500" />
+      </div>
+    );
   }
 
   const handleSubmit = async (e: FormEvent) => {
