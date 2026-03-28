@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import nodemailer from "npm:nodemailer@6";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,23 +40,31 @@ Deno.serve(async (req) => {
       );
     }
     const pdfBuffer = new Uint8Array(await pdfResponse.arrayBuffer());
+    const pdfBase64 = btoa(
+      pdfBuffer.reduce(
+        (data, byte) => data + String.fromCharCode(byte),
+        ""
+      )
+    );
 
-    // Create Gmail SMTP transport
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: gmailUser,
-        pass: gmailPassword,
+    // Send via Gmail SMTP
+    const client = new SMTPClient({
+      connection: {
+        hostname: "smtp.gmail.com",
+        port: 465,
+        tls: true,
+        auth: {
+          username: gmailUser,
+          password: gmailPassword,
+        },
       },
     });
 
-    // Send email
-    await transporter.sendMail({
+    await client.send({
       from: `${from_name} <${gmailUser}>`,
       to: to.join(", "),
       subject,
+      content: "auto",
       html: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
         <p>${message.replace(/\n/g, "<br>")}</p>
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
@@ -64,12 +72,15 @@ Deno.serve(async (req) => {
       </div>`,
       attachments: [
         {
+          content: pdfBase64,
           filename: "informe.pdf",
-          content: Buffer.from(pdfBuffer),
           contentType: "application/pdf",
+          encoding: "base64",
         },
       ],
     });
+
+    await client.close();
 
     return new Response(
       JSON.stringify({ success: true }),
