@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { Building } from "@/types/database";
+import { InsightsPanel } from "@/components/InsightsPanel";
 import {
   Building2,
   ClipboardList,
@@ -40,6 +41,7 @@ export function DashboardPage() {
     reportsThisMonth: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [supervisorId, setSupervisorId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -55,6 +57,8 @@ export function DashboardPage() {
         setLoading(false);
         return;
       }
+
+      setSupervisorId(supervisor.id);
 
       const { data: buildingsData } = await supabase
         .from("buildings")
@@ -195,6 +199,9 @@ export function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* AI Insights */}
+      {supervisorId && <InsightsPanel supervisorId={supervisorId} />}
 
       {/* Buildings list */}
       <div>
