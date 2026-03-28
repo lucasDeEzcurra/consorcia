@@ -353,7 +353,7 @@ export function ReportPage() {
         });
       }
 
-      const { error: sendErr } = await supabase.functions.invoke(
+      const { data: sendData, error: sendErr } = await supabase.functions.invoke(
         "send-report",
         {
           body: {
@@ -367,7 +367,12 @@ export function ReportPage() {
       );
 
       if (sendErr) {
-        console.error("Email send failed:", sendErr);
+        throw new Error(`Error enviando email: ${sendErr.message}`);
+      }
+
+      // The edge function returns JSON with error field on failure
+      if (sendData?.error) {
+        throw new Error(`Error enviando email: ${sendData.error}`);
       }
 
       setStep("sent");
