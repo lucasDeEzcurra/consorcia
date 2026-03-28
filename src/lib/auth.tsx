@@ -42,22 +42,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const initDone = useRef(false);
 
   useEffect(() => {
-    // onAuthStateChange fires immediately with current session,
-    // so we use it as the single source of truth instead of
-    // calling getSession() separately (which causes race conditions).
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-      setSession(newSession);
-
+      // Set session and role atomically — don't set session without role
       if (newSession?.user) {
         const r = await fetchRole(newSession.user.id);
+        // Set both at once so consumers never see session+null role
+        setSession(newSession);
         setRole(r);
       } else {
+        setSession(null);
         setRole(null);
       }
 
-      // Mark init done on first event (covers the INITIAL_SESSION event)
       if (!initDone.current) {
         initDone.current = true;
         setLoading(false);

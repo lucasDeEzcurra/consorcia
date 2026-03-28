@@ -13,7 +13,8 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (loading) {
+  // Loading or signed in with role → redirect
+  if (loading || (session && !role)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0b1120]">
         <Loader2 className="size-6 animate-spin text-amber-500" />
@@ -21,11 +22,9 @@ export function LoginPage() {
     );
   }
 
-  if (session) {
-    if (role) {
-      const redirect = role === "admin" ? "/admin/dashboard" : "/dashboard";
-      return <Navigate to={redirect} replace />;
-    }
+  if (session && role) {
+    const redirect = role === "admin" ? "/admin/dashboard" : "/dashboard";
+    return <Navigate to={redirect} replace />;
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -36,8 +35,10 @@ export function LoginPage() {
     const { error } = await signIn(email, password);
     if (error) {
       setError(error.message);
+      setSubmitting(false);
     }
-    setSubmitting(false);
+    // On success, DON'T set submitting=false — keep the button loading
+    // until onAuthStateChange sets session+role and LoginPage redirects
   };
 
   return (
