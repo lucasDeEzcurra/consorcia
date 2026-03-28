@@ -293,8 +293,6 @@ export function BuildingPage() {
   const generateReport = async () => {
     if (!building) return;
     const month = currentMonth();
-    const existing = reports.find((r) => r.month === month);
-    if (existing) return;
 
     setGeneratingReport(true);
 
@@ -318,12 +316,19 @@ export function BuildingPage() {
       )
       .join("\n");
 
-    await supabase.from("reports").insert({
+    const reportData = {
       building_id: building.id,
       month,
-      status: "draft",
+      status: "draft" as const,
       generated_text: `Informe de Gestión Mensual\n${building.name}\n${formatMonthLabel(month)}\n\nTrabajos completados:\n${summaryText || "No hay trabajos completados este mes."}`,
-    });
+    };
+
+    const existing = reports.find((r) => r.month === month);
+    if (existing) {
+      await supabase.from("reports").update(reportData).eq("id", existing.id);
+    } else {
+      await supabase.from("reports").insert(reportData);
+    }
 
     setGeneratingReport(false);
     fetchReports();
@@ -660,11 +665,27 @@ export function BuildingPage() {
             </div>
 
             {hasReportThisMonth ? (
-              <div className="text-center">
-                <Badge variant="outline" className="mb-2">Ya generado</Badge>
+              <div className="flex flex-col items-center gap-2">
+                <Badge variant="outline">Ya generado</Badge>
                 <p className="text-xs text-slate-400">
                   Podés verlo en la pestaña Reportes.
                 </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={generateReport}
+                  disabled={generatingReport}
+                  className="rounded-xl"
+                >
+                  {generatingReport ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Regenerando...
+                    </>
+                  ) : (
+                    "Regenerar reporte"
+                  )}
+                </Button>
               </div>
             ) : (
               <Button

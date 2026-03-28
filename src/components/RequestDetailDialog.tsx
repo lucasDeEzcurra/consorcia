@@ -78,6 +78,7 @@ export function RequestDetailDialog({
     setSaving(false);
     setResponse("");
     onUpdated();
+    onClose();
   };
 
   const handleRespond = async (e: FormEvent) => {
@@ -123,6 +124,7 @@ export function RequestDetailDialog({
 
     setConverting(false);
     onUpdated();
+    onClose();
   };
 
   const formatDate = (d: string) =>
