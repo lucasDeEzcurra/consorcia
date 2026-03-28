@@ -19,11 +19,12 @@ import {
   Eye,
   EyeOff,
   Sparkles,
+  Check,
 } from "lucide-react";
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
-type Step = "loading" | "generating" | "preview" | "confirm" | "sending" | "sent";
+type Step = "loading" | "select" | "generating" | "preview" | "confirm" | "sending" | "sent";
 
 interface JobWithMedia extends Job {
   media: Media[];
@@ -81,6 +82,8 @@ export function ReportPage() {
   const [regeneratingAi, setRegeneratingAi] = useState(false);
   const [sections, setSections] = useState<ReportSection[]>([]);
   const [expenseSummary, setExpenseSummary] = useState<string | null>(null);
+  const [allJobs, setAllJobs] = useState<JobWithMedia[]>([]);
+  const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
 
   // Email config
   const [emailSubject, setEmailSubject] = useState("");
@@ -168,7 +171,9 @@ export function ReportPage() {
         improved_description: j.description_generated ?? j.description_original,
       }));
 
+      setAllJobs(jobsWithMedia);
       setJobs(jobsWithMedia);
+      setSelectedJobIds(new Set(jobsWithMedia.map((j) => j.id)));
 
       setRecipients(bld.emails);
       setEmailSubject(
@@ -222,8 +227,8 @@ export function ReportPage() {
         return;
       }
 
-      // No report exists yet — generate with AI
-      await generateAiText(bld, jobsWithMedia);
+      // No report exists yet — show job selection
+      setStep("select");
     } catch (err) {
       console.error("ReportPage fetch error:", err);
       setStep("preview");
@@ -299,6 +304,13 @@ export function ReportPage() {
     }
 
     setStep("preview");
+  };
+
+  const startGeneration = async () => {
+    if (!building) return;
+    const selected = allJobs.filter((j) => selectedJobIds.has(j.id));
+    setJobs(selected);
+    await generateAiText(building, selected);
   };
 
   const applyAiResult = async (
@@ -568,6 +580,107 @@ export function ReportPage() {
               Claude está reescribiendo las descripciones para que suenen profesionales...
             </p>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // -- Job selection --
+  if (step === "select") {
+    const toggleJob = (jobId: string) => {
+      setSelectedJobIds((prev) => {
+        const next = new Set(prev);
+        next.has(jobId) ? next.delete(jobId) : next.add(jobId);
+        return next;
+      });
+    };
+    const toggleAll = () => {
+      if (selectedJobIds.size === allJobs.length) {
+        setSelectedJobIds(new Set());
+      } else {
+        setSelectedJobIds(new Set(allJobs.map((j) => j.id)));
+      }
+    };
+
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div className="flex items-center gap-3">
+          <Link
+            to={buildingUrl}
+            className="flex size-9 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          >
+            <ArrowLeft className="size-5" />
+          </Link>
+          <div>
+            <h2 className="text-2xl text-slate-900" style={serif}>
+              Nuevo reporte
+            </h2>
+            <p className="text-sm text-slate-500">
+              {building?.name} — {formatMonthLabel(month)}
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+            <p className="text-sm font-medium text-slate-700">
+              Trabajos completados este mes ({allJobs.length})
+            </p>
+            <button
+              onClick={toggleAll}
+              className="text-xs font-medium text-amber-600 hover:text-amber-500"
+            >
+              {selectedJobIds.size === allJobs.length ? "Deseleccionar todos" : "Seleccionar todos"}
+            </button>
+          </div>
+
+          {allJobs.length === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <p className="text-sm text-slate-500">No hay trabajos completados este mes.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-50">
+              {allJobs.map((job) => {
+                const selected = selectedJobIds.has(job.id);
+                return (
+                  <button
+                    key={job.id}
+                    onClick={() => toggleJob(job.id)}
+                    className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors ${selected ? "bg-amber-50/50" : "hover:bg-slate-50"}`}
+                  >
+                    <div className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border ${selected ? "border-amber-500 bg-amber-500 text-white" : "border-slate-300"}`}>
+                      {selected && <Check className="size-3" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-800 truncate">
+                        {job.description_original}
+                      </p>
+                      <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-slate-400">
+                        <span>{formatDate(job.completed_at!)}</span>
+                        {job.expense_category && <span>{job.expense_category}</span>}
+                        {job.expense_amount != null && <span>${job.expense_amount}</span>}
+                        {job.media.length > 0 && <span>{job.media.length} fotos</span>}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-slate-500">
+            {selectedJobIds.size} de {allJobs.length} seleccionados
+          </p>
+          <Button
+            onClick={startGeneration}
+            disabled={selectedJobIds.size === 0}
+            className="h-11 rounded-xl bg-amber-500 px-6 text-[#0b1120] hover:bg-amber-400"
+          >
+            <Sparkles className="size-4" />
+            Generar reporte con IA
+          </Button>
         </div>
       </div>
     );
