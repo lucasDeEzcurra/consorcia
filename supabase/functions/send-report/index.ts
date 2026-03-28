@@ -1,10 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
 Deno.serve(async (req) => {
@@ -21,9 +21,12 @@ Deno.serve(async (req) => {
       from_name: string;
     };
 
-    if (!RESEND_API_KEY) {
+    const gmailUser = Deno.env.get("GMAIL_USER");
+    const gmailPassword = Deno.env.get("GMAIL_APP_PASSWORD");
+
+    if (!gmailUser || !gmailPassword) {
       return new Response(
-        JSON.stringify({ error: "RESEND_API_KEY not configured" }),
+        JSON.stringify({ error: "GMAIL_USER o GMAIL_APP_PASSWORD no configurados" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -32,53 +35,57 @@ Deno.serve(async (req) => {
     const pdfResponse = await fetch(pdf_url);
     if (!pdfResponse.ok) {
       return new Response(
-        JSON.stringify({ error: "Could not fetch PDF from storage" }),
+        JSON.stringify({ error: "No se pudo descargar el PDF del storage" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const pdfBuffer = await pdfResponse.arrayBuffer();
+    const pdfBuffer = new Uint8Array(await pdfResponse.arrayBuffer());
     const pdfBase64 = btoa(
-      new Uint8Array(pdfBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
+      pdfBuffer.reduce(
+        (data, byte) => data + String.fromCharCode(byte),
+        ""
+      )
     );
 
-    // Send email via Resend
-    const emailResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
+    // Send via Gmail SMTP
+    const client = new SMTPClient({
+      connection: {
+        hostname: "smtp.gmail.com",
+        port: 465,
+        tls: true,
+        auth: {
+          username: gmailUser,
+          password: gmailPassword,
+        },
       },
-      body: JSON.stringify({
-        from: `${from_name} <onboarding@resend.dev>`,
-        to,
-        subject,
-        html: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-          <p>${message.replace(/\n/g, "<br>")}</p>
-          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-          <p style="color: #888; font-size: 12px;">Este email fue enviado por Consorcia.</p>
-        </div>`,
-        attachments: [
-          {
-            filename: "informe.pdf",
-            content: pdfBase64,
-            type: "application/pdf",
-          },
-        ],
-      }),
     });
 
-    if (!emailResponse.ok) {
-      const errText = await emailResponse.text();
-      return new Response(
-        JSON.stringify({ error: `Resend error: ${emailResponse.status}`, details: errText }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const emailResult = await emailResponse.json();
-    return new Response(JSON.stringify({ success: true, email_id: emailResult.id }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    await client.send({
+      from: `${from_name} <${gmailUser}>`,
+      to: to.join(", "),
+      subject,
+      content: "auto",
+      html: `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <p>${message.replace(/\n/g, "<br>")}</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">Este email fue enviado por Consorcia.</p>
+      </div>`,
+      attachments: [
+        {
+          content: pdfBase64,
+          filename: "informe.pdf",
+          contentType: "application/pdf",
+          encoding: "base64",
+        },
+      ],
     });
+
+    await client.close();
+
+    return new Response(
+      JSON.stringify({ success: true }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   } catch (error) {
     return new Response(
       JSON.stringify({ error: (error as Error).message }),
