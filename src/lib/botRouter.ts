@@ -36,7 +36,9 @@ interface SupervisorBuilding {
 
 // ── Config ──
 
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
+// GROQ_API_KEY lives server-side only (Supabase edge function secrets).
+// botRouter.ts is a reference implementation — the real execution happens in the edge function.
+const GROQ_API_KEY = "";
 
 // ── Session helpers ──
 
