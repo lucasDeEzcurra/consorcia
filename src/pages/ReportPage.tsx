@@ -18,6 +18,8 @@ import {
   Mail,
   Eye,
   EyeOff,
+  Sparkles,
+  RefreshCw,
 } from "lucide-react";
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
@@ -70,6 +72,8 @@ export function ReportPage() {
   const [summary, setSummary] = useState("");
   const [closing, setClosing] = useState("");
   const [aiError, setAiError] = useState<string | null>(null);
+  const [aiUsed, setAiUsed] = useState(false);
+  const [regeneratingAi, setRegeneratingAi] = useState(false);
 
   // Email config
   const [emailSubject, setEmailSubject] = useState("");
@@ -176,6 +180,7 @@ export function ReportPage() {
             setSummary(parsed.summary ?? "");
             setClosing(parsed.closing ?? "");
             if (parsed.improved_descriptions) {
+              setAiUsed(true);
               for (let i = 0; i < jobsWithMedia.length; i++) {
                 if (parsed.improved_descriptions[i]) {
                   jobsWithMedia[i]!.improved_description =
@@ -252,6 +257,7 @@ export function ReportPage() {
 
       setSummary(data.summary);
       setClosing(data.closing);
+      setAiUsed(true);
 
       const updated = jobsWithMedia.map((j, i) => ({
         ...j,
@@ -281,6 +287,63 @@ export function ReportPage() {
     }
 
     setStep("preview");
+  };
+
+  const handleRegenerateAi = async () => {
+    if (!building || jobs.length === 0) return;
+    setRegeneratingAi(true);
+    setAiError(null);
+    setAiUsed(false);
+
+    try {
+      const response = await supabase.functions.invoke("generate-report", {
+        body: {
+          building_name: building.name,
+          month: formatMonthLabel(month),
+          jobs: jobs.map((j) => ({
+            id: j.id,
+            description_original: j.description_original,
+            completed_at: formatDate(j.completed_at!),
+          })),
+        },
+      });
+
+      if (response.error) throw new Error(response.error.message);
+
+      const data = response.data as {
+        summary: string;
+        improved_descriptions: string[];
+        closing: string;
+        error?: string;
+      };
+
+      if (data.error) throw new Error(data.error);
+
+      setSummary(data.summary);
+      setClosing(data.closing);
+      setAiUsed(true);
+
+      const updated = jobs.map((j, i) => ({
+        ...j,
+        improved_description:
+          data.improved_descriptions[i] ?? j.description_original,
+      }));
+      setJobs(updated);
+
+      for (let i = 0; i < updated.length; i++) {
+        const job = updated[i]!;
+        if (data.improved_descriptions[i]) {
+          await supabase
+            .from("jobs")
+            .update({ description_generated: data.improved_descriptions[i] })
+            .eq("id", job.id);
+        }
+      }
+    } catch (err) {
+      setAiError((err as Error).message);
+    } finally {
+      setRegeneratingAi(false);
+    }
   };
 
   useEffect(() => {
@@ -431,16 +494,20 @@ export function ReportPage() {
   if (step === "loading" || step === "generating") {
     return (
       <div className="flex flex-col items-center gap-4 py-24">
-        <div className="flex size-16 items-center justify-center rounded-2xl bg-amber-50">
-          <Loader2 className="size-8 animate-spin text-amber-500" />
+        <div className="flex size-16 items-center justify-center rounded-2xl bg-violet-50">
+          {step === "generating" ? (
+            <Sparkles className="size-8 text-violet-500 animate-pulse" />
+          ) : (
+            <Loader2 className="size-8 animate-spin text-amber-500" />
+          )}
         </div>
         <div className="text-center">
           <p className="text-base font-semibold text-slate-800">
-            {step === "generating" ? "Generando reporte" : "Cargando reporte"}
+            {step === "generating" ? "Mejorando con inteligencia artificial" : "Cargando reporte"}
           </p>
           {step === "generating" && (
             <p className="mt-1 text-sm text-slate-500">
-              Estamos usando IA para mejorar las descripciones...
+              Claude está reescribiendo las descripciones para que suenen profesionales...
             </p>
           )}
         </div>
@@ -606,6 +673,31 @@ export function ReportPage() {
           {existingReport?.status === "sent" && (
             <Badge>Enviado</Badge>
           )}
+          {aiUsed && (
+            <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700">
+              <Sparkles className="mr-1 size-3" />
+              Mejorado con IA
+            </Badge>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRegenerateAi}
+            disabled={regeneratingAi || jobs.length === 0}
+            className="rounded-xl"
+          >
+            {regeneratingAi ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Mejorando...
+              </>
+            ) : (
+              <>
+                <Sparkles className="size-4" />
+                {aiUsed ? "Regenerar con IA" : "Mejorar con IA"}
+              </>
+            )}
+          </Button>
           <Button
             onClick={handleContinue}
             disabled={generatingPdf}
