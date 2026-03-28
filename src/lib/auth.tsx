@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useRef,
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
@@ -20,8 +21,6 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const LOADING_TIMEOUT_MS = 8000;
-
 async function fetchRole(userId: string): Promise<UserRole | null> {
   try {
     const { data, error } = await supabase
@@ -29,13 +28,9 @@ async function fetchRole(userId: string): Promise<UserRole | null> {
       .select("role")
       .eq("user_id", userId)
       .single();
-    if (error) {
-      console.error("fetchRole error:", error.message);
-      return null;
-    }
+    if (error) return null;
     return (data?.role as UserRole) ?? null;
-  } catch (err) {
-    console.error("fetchRole exception:", err);
+  } catch {
     return null;
   }
 }
@@ -44,90 +39,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const initDone = useRef(false);
 
   useEffect(() => {
-    let mounted = true;
-
-    // Safety timeout — never stay in loading forever
-    const timeout = setTimeout(() => {
-      if (mounted && loading) {
-        console.warn("Auth loading timeout — forcing loaded state");
-        setLoading(false);
-      }
-    }, LOADING_TIMEOUT_MS);
-
-    async function init() {
-      try {
-        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
-
-        if (!mounted) return;
-
-        if (error || !initialSession?.user) {
-          // No valid session — clear everything and stop loading
-          setSession(null);
-          setRole(null);
-          setLoading(false);
-          return;
-        }
-
-        setSession(initialSession);
-
-        const r = await fetchRole(initialSession.user.id);
-        if (!mounted) return;
-
-        if (r) {
-          setRole(r);
-        } else {
-          // Session exists but no role in DB — stale session, sign out
-          console.warn("Session exists but no role found — signing out");
-          await supabase.auth.signOut();
-          setSession(null);
-          setRole(null);
-        }
-      } catch (err) {
-        console.error("Auth init error:", err);
-        if (mounted) {
-          setSession(null);
-          setRole(null);
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-
-    init();
-
+    // onAuthStateChange fires immediately with current session,
+    // so we use it as the single source of truth instead of
+    // calling getSession() separately (which causes race conditions).
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      if (!mounted) return;
-
-      if (event === "SIGNED_OUT" || !newSession?.user) {
-        setSession(null);
-        setRole(null);
-        return;
-      }
-
+    } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       setSession(newSession);
 
-      // Only re-fetch role on sign-in or token refresh, not on every event
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+      if (newSession?.user) {
         const r = await fetchRole(newSession.user.id);
-        if (mounted) {
-          setRole(r);
-          if (!r && event === "SIGNED_IN") {
-            console.warn("Signed in but no role — signing out");
-            await supabase.auth.signOut();
-          }
-        }
+        setRole(r);
+      } else {
+        setRole(null);
+      }
+
+      // Mark init done on first event (covers the INITIAL_SESSION event)
+      if (!initDone.current) {
+        initDone.current = true;
+        setLoading(false);
       }
     });
 
-    return () => {
-      mounted = false;
-      clearTimeout(timeout);
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string) => {
