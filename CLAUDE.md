@@ -1,22 +1,25 @@
 # CLAUDE.md
 
+Antes de cualquier tarea, leé INSTRUCTIONS.md que tiene la spec completa del producto con entidades, reglas de negocio, flujos de WhatsApp, estructura de reportes y prioridades.
+
 ## Stack
 
-- **Framework**: Next.js 14 App Router
+- **Framework**: Vite + React 18
 - **Language**: TypeScript (strict mode)
+- **Routing**: React Router v7
 - **Styling**: Tailwind CSS
 - **UI Components**: shadcn/ui
 - **Backend**: Supabase (auth, database, storage, edge functions)
 - **AI**: Claude API
-- **PDF Reports**: React-PDF
+- **PDF Reports**: HTML → PDF
 - **Email**: Resend
 
 ## Project Structure
 
 ```
-src/app/          → Rutas y páginas (App Router)
+src/pages/        → Páginas/rutas
 src/components/   → Componentes de UI
-src/lib/          → Utilidades y Supabase client
+src/lib/          → Utilidades, Supabase client, auth context
 src/types/        → Tipos TypeScript
 supabase/migrations/ → Migraciones SQL
 ```
@@ -38,8 +41,8 @@ App para administradoras de consorcios/edificios en Argentina.
 ## Code Conventions
 
 - TypeScript strict siempre
-- Server Components por defecto; usar `'use client'` solo cuando sea necesario
-- Preferir server actions y data fetching en server components
+- Componentes funcionales con hooks
+- Supabase client-side con `@supabase/supabase-js`
 
 ## Visual Style
 
