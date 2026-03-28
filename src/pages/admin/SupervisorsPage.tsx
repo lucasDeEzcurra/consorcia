@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Users, ChevronRight, Loader2 } from "lucide-react";
+import { Plus, Users, ChevronRight, Loader2, KeyRound } from "lucide-react";
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
@@ -141,6 +141,15 @@ export function SupervisorsPage() {
               <div>
                 <p className="text-sm font-semibold text-slate-800">{s.name}</p>
                 <p className="text-xs text-slate-400">{s.phone_number}</p>
+                {s.email && (
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <KeyRound className="size-3 text-slate-300" />
+                    <span className="text-[11px] text-slate-400">{s.email}</span>
+                    {s.login_password && (
+                      <span className="text-[11px] text-slate-300">/ {s.login_password}</span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">

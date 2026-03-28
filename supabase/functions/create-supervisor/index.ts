@@ -96,6 +96,8 @@ Deno.serve(async (req) => {
         user_id: userId,
         name,
         phone_number,
+        email,
+        login_password: password,
       })
       .select()
       .single();

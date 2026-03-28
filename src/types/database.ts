@@ -13,6 +13,8 @@ export interface Supervisor {
   name: string;
   phone_number: string;
   photo_url: string | null;
+  email: string | null;
+  login_password: string | null;
   created_at: string;
 }
 
