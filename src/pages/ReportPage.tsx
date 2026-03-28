@@ -19,7 +19,6 @@ import {
   Eye,
   EyeOff,
   Sparkles,
-  RefreshCw,
 } from "lucide-react";
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
