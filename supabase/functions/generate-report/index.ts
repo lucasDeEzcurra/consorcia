@@ -42,15 +42,18 @@ Deno.serve(async (req) => {
 
     const jobDetails = jobs
       .map((j, i) => {
-        let detail = `${i + 1}. Descripción: "${j.description_original}"`;
-        detail += `\n   Creado: ${j.created_at} → Completado: ${j.completed_at}`;
+        let detail = `${i + 1}. [ID: ${j.id}] "${j.description_original}"`;
+        if (j.created_at) detail += `\n   Creado: ${j.created_at}`;
+        detail += `\n   Completado: ${j.completed_at}`;
         if (j.expense_amount) {
-          detail += `\n   Gasto: $${j.expense_amount.toLocaleString("es-AR")}`;
-          if (j.expense_provider) detail += ` — Proveedor: ${j.expense_provider}`;
-          if (j.expense_category) detail += ` — Categoría: ${j.expense_category}`;
+          detail += `\n   Gasto: $${j.expense_amount}`;
+          if (j.expense_provider) detail += ` | Proveedor: ${j.expense_provider}`;
+          if (j.expense_category) detail += ` | Categoria: ${j.expense_category}`;
         }
-        if (j.photo_count_before > 0 || j.photo_count_after > 0) {
-          detail += `\n   Fotos: ${j.photo_count_before} antes, ${j.photo_count_after} después`;
+        const before = j.photo_count_before || 0;
+        const after = j.photo_count_after || 0;
+        if (before > 0 || after > 0) {
+          detail += `\n   Fotos: ${before} antes, ${after} despues`;
         }
         return detail;
       })
@@ -72,8 +75,8 @@ ${building_address ? `- Dirección: ${building_address}` : ""}
 ${supervisor_name ? `- Supervisor: ${supervisor_name}` : ""}
 - Período: ${month}
 - Total de trabajos completados: ${jobs.length}
-- Gasto total del período: $${totalExpense.toLocaleString("es-AR")}
-${categoryCounts.size > 0 ? `- Categorías: ${[...categoryCounts.entries()].map(([c, n]) => `${c} (${n})`).join(", ")}` : ""}
+- Gasto total del periodo: $${totalExpense}
+${categoryCounts.size > 0 ? `- Categorias: ${[...categoryCounts.entries()].map(([c, n]) => `${c} (${n})`).join(", ")}` : ""}
 
 TRABAJOS COMPLETADOS:
 ${jobDetails}
