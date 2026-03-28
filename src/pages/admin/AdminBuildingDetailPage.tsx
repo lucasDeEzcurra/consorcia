@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import type { Building, Supervisor, Job, Report, Media } from "@/types/database";
+import type { Building, Supervisor, Job, Report, Media, TenantRequest, RequestMedia, Tenant } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { JobDetailDialog } from "@/components/JobDetailDialog";
+import { RequestDetailDialog } from "@/components/RequestDetailDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   ArrowLeft,
   Save,
@@ -16,6 +24,10 @@ import {
   CheckCircle2,
   FileText,
   ChevronRight,
+  MessageCircle,
+  Users,
+  Plus,
+  Phone,
 } from "lucide-react";
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
@@ -52,6 +64,22 @@ export function AdminBuildingDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Tenants
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [tenantDialogOpen, setTenantDialogOpen] = useState(false);
+  const [tenantName, setTenantName] = useState("");
+  const [tenantPhone, setTenantPhone] = useState("");
+  const [tenantUnit, setTenantUnit] = useState("");
+  const [creatingTenant, setCreatingTenant] = useState(false);
+  const [tenantError, setTenantError] = useState<string | null>(null);
+
+  // Requests / Reclamos
+  const [requests, setRequests] = useState<(TenantRequest & { tenant_name?: string })[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<TenantRequest | null>(null);
+  const [selectedRequestMedia, setSelectedRequestMedia] = useState<RequestMedia[]>([]);
+  const [selectedRequestTenant, setSelectedRequestTenant] = useState<Tenant | null>(null);
+  const [requestDialogOpen, setRequestDialogOpen] = useState(false);
+
   // Job detail dialog
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [selectedJobMedia, setSelectedJobMedia] = useState<Media[]>([]);
@@ -59,11 +87,13 @@ export function AdminBuildingDetailPage() {
 
   const fetchData = useCallback(async () => {
     if (!id) return;
-    const [bldRes, supRes, jobRes, repRes] = await Promise.all([
+    const [bldRes, supRes, jobRes, repRes, tenantRes, reqRes] = await Promise.all([
       supabase.from("buildings").select("*").eq("id", id).single(),
       supabase.from("supervisors").select("*").order("name"),
       supabase.from("jobs").select("*").eq("building_id", id).order("created_at", { ascending: false }).limit(20),
       supabase.from("reports").select("*").eq("building_id", id).order("month", { ascending: false }),
+      supabase.from("tenants").select("*").eq("building_id", id).order("name"),
+      supabase.from("tenant_requests").select("*").eq("building_id", id).order("created_at", { ascending: false }),
     ]);
 
     const bld = bldRes.data as Building | null;
@@ -76,12 +106,68 @@ export function AdminBuildingDetailPage() {
     setSupervisors((supRes.data ?? []) as Supervisor[]);
     setJobs((jobRes.data ?? []) as Job[]);
     setReports((repRes.data ?? []) as Report[]);
+
+    const tenantsList = (tenantRes.data ?? []) as Tenant[];
+    setTenants(tenantsList);
+    const tenantMap = new Map(tenantsList.map((t) => [t.id, t.name]));
+    const reqs = (reqRes.data ?? []) as TenantRequest[];
+    setRequests(reqs.map((r) => ({ ...r, tenant_name: tenantMap.get(r.tenant_id) })));
+
     setLoading(false);
   }, [id]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleCreateTenant = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!id) return;
+    setCreatingTenant(true);
+    setTenantError(null);
+
+    const { error } = await supabase.from("tenants").insert({
+      building_id: id,
+      name: tenantName.trim(),
+      phone_number: tenantPhone.trim(),
+      unit: tenantUnit.trim() || null,
+    });
+
+    if (error) {
+      setTenantError(error.message.includes("duplicate") ? "Ese número de teléfono ya está registrado." : error.message);
+      setCreatingTenant(false);
+      return;
+    }
+
+    setTenantDialogOpen(false);
+    setTenantName("");
+    setTenantPhone("");
+    setTenantUnit("");
+    setCreatingTenant(false);
+    fetchData();
+  };
+
+  const deleteTenant = async (tenantId: string) => {
+    await supabase.from("tenants").delete().eq("id", tenantId);
+    fetchData();
+  };
+
+  const openRequestDetail = async (req: TenantRequest) => {
+    setSelectedRequest(req);
+    const { data: mediaData } = await supabase
+      .from("request_media")
+      .select("*")
+      .eq("request_id", req.id)
+      .order("created_at");
+    setSelectedRequestMedia((mediaData as RequestMedia[]) ?? []);
+    const { data: tenantData } = await supabase
+      .from("tenants")
+      .select("*")
+      .eq("id", req.tenant_id)
+      .single();
+    setSelectedRequestTenant(tenantData as Tenant | null);
+    setRequestDialogOpen(true);
+  };
 
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
@@ -326,6 +412,110 @@ export function AdminBuildingDetailPage() {
         </div>
       )}
 
+      {/* Inquilinos */}
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+            Inquilinos
+          </h2>
+          <Button size="sm" variant="outline" onClick={() => setTenantDialogOpen(true)} className="rounded-xl">
+            <Plus className="size-4" />
+            Agregar inquilino
+          </Button>
+        </div>
+        {tenants.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center">
+            <Users className="mx-auto size-8 text-slate-300" />
+            <p className="mt-2 text-sm text-slate-500">Sin inquilinos registrados.</p>
+            <p className="mt-1 text-xs text-slate-400">Agregá inquilinos para que puedan usar el bot de WhatsApp.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {tenants.map((t) => (
+              <div key={t.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-9 items-center justify-center rounded-lg bg-slate-100">
+                    <Users className="size-4 text-slate-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">
+                      {t.name}{t.unit ? ` — Unidad ${t.unit}` : ""}
+                    </p>
+                    <p className="flex items-center gap-1 text-xs text-slate-400">
+                      <Phone className="size-3" />{t.phone_number}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => deleteTenant(t.id)}
+                  className="flex size-8 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-red-50 hover:text-red-500"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Reclamos */}
+      <div>
+        <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+          Reclamos de inquilinos
+          {requests.filter((r) => r.status === "pending").length > 0 && (
+            <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+              {requests.filter((r) => r.status === "pending").length} nuevos
+            </span>
+          )}
+        </h2>
+        {requests.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center">
+            <MessageCircle className="mx-auto size-8 text-slate-300" />
+            <p className="mt-2 text-sm text-slate-500">Sin reclamos.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {requests.map((req) => {
+              const statusColors: Record<string, string> = {
+                pending: "bg-amber-100 text-amber-800",
+                in_progress: "bg-blue-100 text-blue-800",
+                resolved: "bg-emerald-100 text-emerald-800",
+                rejected: "bg-red-100 text-red-800",
+              };
+              const statusLabels: Record<string, string> = {
+                pending: "Pendiente",
+                in_progress: "En progreso",
+                resolved: "Resuelto",
+                rejected: "Rechazado",
+              };
+              return (
+                <button
+                  key={req.id}
+                  onClick={() => openRequestDetail(req)}
+                  className="group flex w-full items-center justify-between rounded-xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-all hover:border-amber-200 hover:shadow-md"
+                >
+                  <div className="min-w-0 flex-1">
+                    {req.tenant_name && (
+                      <p className="text-xs font-medium text-amber-600 mb-0.5">{req.tenant_name}</p>
+                    )}
+                    <p className="truncate text-sm font-medium text-slate-800">{req.description}</p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      {req.category && `${req.category} · `}{formatDate(req.created_at)}
+                    </p>
+                  </div>
+                  <div className="ml-3 flex shrink-0 items-center gap-2">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusColors[req.status] ?? ""}`}>
+                      {statusLabels[req.status] ?? req.status}
+                    </span>
+                    <ChevronRight className="size-4 text-slate-300 group-hover:text-amber-500" />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Delete */}
       <div className="border-t border-slate-100 pt-6">
         {confirmDelete ? (
@@ -364,6 +554,60 @@ export function AdminBuildingDetailPage() {
         }}
         onUpdated={handleJobUpdated}
       />
+
+      {/* Request Detail Dialog */}
+      <RequestDetailDialog
+        request={selectedRequest}
+        media={selectedRequestMedia}
+        tenant={selectedRequestTenant}
+        open={requestDialogOpen}
+        onClose={() => {
+          setRequestDialogOpen(false);
+          setSelectedRequest(null);
+        }}
+        onUpdated={fetchData}
+        buildingId={building.id}
+      />
+
+      {/* Create Tenant Dialog */}
+      <Dialog open={tenantDialogOpen} onOpenChange={setTenantDialogOpen}>
+        <DialogContent onClose={() => setTenantDialogOpen(false)}>
+          <DialogHeader>
+            <DialogTitle>Nuevo inquilino</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateTenant} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Nombre</label>
+              <Input value={tenantName} onChange={(e) => setTenantName(e.target.value)} required placeholder="María García" className="h-10 rounded-xl" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Teléfono (WhatsApp)</label>
+              <Input value={tenantPhone} onChange={(e) => setTenantPhone(e.target.value)} required placeholder="+5491156789012" className="h-10 rounded-xl" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-700">Unidad (opcional)</label>
+              <Input value={tenantUnit} onChange={(e) => setTenantUnit(e.target.value)} placeholder="4B, PB A, Dpto 12..." className="h-10 rounded-xl" />
+            </div>
+            {tenantError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                <p className="text-sm text-red-600">{tenantError}</p>
+              </div>
+            )}
+            <DialogFooter>
+              <Button type="submit" disabled={creatingTenant} className="h-10 rounded-xl bg-amber-500 text-[#0b1120] hover:bg-amber-400">
+                {creatingTenant ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Creando...
+                  </>
+                ) : (
+                  "Agregar inquilino"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -54,3 +54,36 @@ export interface Report {
   created_at: string;
   sent_at: string | null;
 }
+
+export interface Tenant {
+  id: string;
+  building_id: string;
+  name: string;
+  phone_number: string;
+  unit: string | null;
+  created_at: string;
+}
+
+export type RequestStatus = "pending" | "in_progress" | "resolved" | "rejected";
+export type RequestUrgency = "baja" | "normal" | "urgente";
+
+export interface TenantRequest {
+  id: string;
+  building_id: string;
+  tenant_id: string;
+  description: string;
+  category: string | null;
+  urgency: RequestUrgency;
+  status: RequestStatus;
+  admin_response: string | null;
+  job_id: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface RequestMedia {
+  id: string;
+  request_id: string;
+  url: string;
+  created_at: string;
+}

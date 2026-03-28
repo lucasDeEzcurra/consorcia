@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import type { Building, Job, Media, Report } from "@/types/database";
+import type { Building, Job, Media, Report, TenantRequest, RequestMedia, Tenant } from "@/types/database";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { JobDetailDialog } from "@/components/JobDetailDialog";
+import { RequestDetailDialog } from "@/components/RequestDetailDialog";
 import { CreateJobForm } from "@/components/CreateJobForm";
 import {
   ArrowLeft,
@@ -21,6 +22,8 @@ import {
   Clock,
   Send,
   Users,
+  MessageCircle,
+  AlertTriangle,
 } from "lucide-react";
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
@@ -45,11 +48,12 @@ function formatMonthLabel(month: string) {
   return date.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
 }
 
-type TabId = "pending" | "completed" | "history" | "reports" | "recipients" | "generate";
+type TabId = "pending" | "completed" | "history" | "reclamos" | "reports" | "recipients" | "generate";
 
 const tabs: { id: TabId; label: string; icon: typeof ClipboardList }[] = [
   { id: "pending", label: "Pendientes", icon: ClipboardList },
   { id: "completed", label: "Completados", icon: CheckCircle2 },
+  { id: "reclamos", label: "Reclamos", icon: MessageCircle },
   { id: "history", label: "Historial", icon: Clock },
   { id: "reports", label: "Reportes", icon: FileText },
   { id: "recipients", label: "Destinatarios", icon: Users },
@@ -75,6 +79,15 @@ export function BuildingPage() {
 
   // Emails
   const [newEmail, setNewEmail] = useState("");
+
+  // Reclamos
+  const [requests, setRequests] = useState<(TenantRequest & { tenant_name?: string; tenant_unit?: string })[]>([]);
+
+  // Request detail dialog
+  const [selectedRequest, setSelectedRequest] = useState<TenantRequest | null>(null);
+  const [selectedRequestMedia, setSelectedRequestMedia] = useState<RequestMedia[]>([]);
+  const [selectedRequestTenant, setSelectedRequestTenant] = useState<Tenant | null>(null);
+  const [requestDialogOpen, setRequestDialogOpen] = useState(false);
 
   // Job detail dialog
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -149,6 +162,37 @@ export function BuildingPage() {
     setReports((data as Report[]) ?? []);
   }, [id]);
 
+  const fetchRequests = useCallback(async () => {
+    if (!id) return;
+    // Fetch requests with tenant info
+    const { data: reqData } = await supabase
+      .from("tenant_requests")
+      .select("*")
+      .eq("building_id", id)
+      .order("created_at", { ascending: false });
+
+    const reqs = (reqData ?? []) as TenantRequest[];
+    if (reqs.length === 0) {
+      setRequests([]);
+      return;
+    }
+
+    // Fetch tenant names
+    const tenantIds = [...new Set(reqs.map((r) => r.tenant_id))];
+    const { data: tenantData } = await supabase
+      .from("tenants")
+      .select("id, name, unit")
+      .in("id", tenantIds);
+    const tenantMap = new Map((tenantData ?? []).map((t: { id: string; name: string; unit: string | null }) => [t.id, t]));
+
+    setRequests(
+      reqs.map((r) => {
+        const t = tenantMap.get(r.tenant_id);
+        return { ...r, tenant_name: t?.name, tenant_unit: t?.unit ?? undefined };
+      })
+    );
+  }, [id]);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     await Promise.all([
@@ -157,13 +201,31 @@ export function BuildingPage() {
       fetchCompleted(),
       fetchHistory(0),
       fetchReports(),
+      fetchRequests(),
     ]);
     setLoading(false);
-  }, [fetchBuilding, fetchPending, fetchCompleted, fetchHistory, fetchReports]);
+  }, [fetchBuilding, fetchPending, fetchCompleted, fetchHistory, fetchReports, fetchRequests]);
 
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
+
+  const openRequestDetail = async (req: TenantRequest) => {
+    setSelectedRequest(req);
+    const { data: mediaData } = await supabase
+      .from("request_media")
+      .select("*")
+      .eq("request_id", req.id)
+      .order("created_at");
+    setSelectedRequestMedia((mediaData as RequestMedia[]) ?? []);
+    const { data: tenantData } = await supabase
+      .from("tenants")
+      .select("*")
+      .eq("id", req.tenant_id)
+      .single();
+    setSelectedRequestTenant(tenantData as Tenant | null);
+    setRequestDialogOpen(true);
+  };
 
   const openJobDetail = async (job: Job) => {
     setSelectedJob(job);
@@ -308,7 +370,7 @@ export function BuildingPage() {
         <div className="flex gap-1 overflow-x-auto px-4 pb-2 sm:flex-wrap sm:px-0 sm:pb-0">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
-            const count = tab.id === "pending" ? pendingJobs.length : undefined;
+            const count = tab.id === "pending" ? pendingJobs.length : tab.id === "reclamos" ? requests.filter((r) => r.status === "pending" || r.status === "in_progress").length : undefined;
             return (
               <button
                 key={tab.id}
@@ -412,6 +474,69 @@ export function BuildingPage() {
                   Siguiente
                   <ChevronRight className="size-4" />
                 </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Reclamos */}
+        {activeTab === "reclamos" && (
+          <div>
+            {requests.length === 0 ? (
+              <EmptyState
+                icon={MessageCircle}
+                message="No hay reclamos"
+                description="Los reclamos de inquilinos por WhatsApp aparecerán acá."
+              />
+            ) : (
+              <div className="space-y-2">
+                {requests.map((req) => {
+                  const statusColors: Record<string, string> = {
+                    pending: "bg-amber-100 text-amber-800",
+                    in_progress: "bg-blue-100 text-blue-800",
+                    resolved: "bg-emerald-100 text-emerald-800",
+                    rejected: "bg-red-100 text-red-800",
+                  };
+                  const statusLabels: Record<string, string> = {
+                    pending: "Pendiente",
+                    in_progress: "En progreso",
+                    resolved: "Resuelto",
+                    rejected: "Rechazado",
+                  };
+                  return (
+                    <button
+                      key={req.id}
+                      onClick={() => openRequestDetail(req)}
+                      className="group flex w-full items-center justify-between rounded-xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-all hover:border-amber-200 hover:shadow-md"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          {req.tenant_name && (
+                            <span className="text-xs font-medium text-amber-600">
+                              {req.tenant_name}{req.tenant_unit ? ` (${req.tenant_unit})` : ""}
+                            </span>
+                          )}
+                          {req.urgency === "urgente" && (
+                            <AlertTriangle className="size-3 text-red-500" />
+                          )}
+                        </div>
+                        <p className="truncate text-sm font-medium text-slate-800">
+                          {req.description}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-400">
+                          {req.category && `${req.category} · `}
+                          {formatDate(req.created_at)}
+                        </p>
+                      </div>
+                      <div className="ml-3 flex shrink-0 items-center gap-2">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusColors[req.status] ?? ""}`}>
+                          {statusLabels[req.status] ?? req.status}
+                        </span>
+                        <ChevronRight className="size-4 text-slate-300 transition-colors group-hover:text-amber-500" />
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -572,6 +697,22 @@ export function BuildingPage() {
           setSelectedJob(null);
         }}
         onUpdated={handleJobUpdated}
+      />
+
+      <RequestDetailDialog
+        request={selectedRequest}
+        media={selectedRequestMedia}
+        tenant={selectedRequestTenant}
+        open={requestDialogOpen}
+        onClose={() => {
+          setRequestDialogOpen(false);
+          setSelectedRequest(null);
+        }}
+        onUpdated={() => {
+          fetchRequests();
+          fetchPending();
+        }}
+        buildingId={building.id}
       />
     </div>
   );
