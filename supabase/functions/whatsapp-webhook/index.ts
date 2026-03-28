@@ -934,8 +934,47 @@ Deno.serve(async (req) => {
       );
     }
 
-    const isSupervisor = !!supervisor;
-    const entityId = isSupervisor ? supervisor!.id : tenant!.id;
+    // If both supervisor and tenant, check for role selection session or ask
+    let isSupervisor = !!supervisor && !tenant;
+    let entityId: string;
+
+    if (supervisor && tenant) {
+      // Check if there's an existing session for either role
+      const { data: supSession } = await supabase
+        .from("whatsapp_sessions")
+        .select("entity_id, state")
+        .eq("entity_id", supervisor.id)
+        .single();
+      const { data: tenantSession } = await supabase
+        .from("whatsapp_sessions")
+        .select("entity_id, state")
+        .eq("entity_id", tenant.id)
+        .single();
+
+      // If one has an active (non-idle) session, use that
+      if (supSession && supSession.state !== "idle" && (!tenantSession || tenantSession.state === "idle")) {
+        isSupervisor = true;
+        entityId = supervisor.id;
+      } else if (tenantSession && tenantSession.state !== "idle" && (!supSession || supSession.state === "idle")) {
+        isSupervisor = false;
+        entityId = tenant.id;
+      } else if (body.trim() === "S" || body.trim() === "s") {
+        isSupervisor = true;
+        entityId = supervisor.id;
+        await updateSession(entityId, "idle", {});
+      } else if (body.trim() === "I" || body.trim() === "i") {
+        isSupervisor = false;
+        entityId = tenant.id;
+        await updateSession(entityId, "idle", {});
+      } else {
+        // Neither has active session and no role selected — ask
+        return twiml(
+          "👋 Hola! Tu número está registrado como *supervisor* e *inquilino*.\n\n*S* — Entrar como supervisor\n*I* — Entrar como inquilino\n\n_Respondé con la letra_"
+        );
+      }
+    } else {
+      entityId = supervisor ? supervisor.id : tenant!.id;
+    }
 
     const session = await getOrCreateSession(entityId);
     const ctx = session.context;
