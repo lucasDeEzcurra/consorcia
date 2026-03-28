@@ -11,7 +11,7 @@ const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY") || "";
 
 interface Session {
   id: string;
-  supervisor_id: string;
+  entity_id: string;
   state: string;
   context: Record<string, unknown>;
   updated_at: string;
@@ -205,14 +205,14 @@ async function getOrCreateSession(entityId: string): Promise<Session> {
   const { data } = await supabase
     .from("whatsapp_sessions")
     .select("*")
-    .eq("supervisor_id", entityId)
+    .eq("entity_id", entityId)
     .single();
 
   if (data) return data as Session;
 
   const { data: created } = await supabase
     .from("whatsapp_sessions")
-    .insert({ supervisor_id: entityId, state: "idle", context: {} })
+    .insert({ entity_id: entityId, state: "idle", context: {} })
     .select()
     .single();
 
@@ -227,7 +227,7 @@ async function updateSession(
   await supabase
     .from("whatsapp_sessions")
     .update({ state, context, updated_at: new Date().toISOString() })
-    .eq("supervisor_id", entityId);
+    .eq("entity_id", entityId);
 }
 
 // ══════════════════════════════════════════
