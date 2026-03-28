@@ -20,7 +20,7 @@ import {
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
 
-type Step = "loading" | "preview" | "confirm" | "sending" | "sent";
+type Step = "loading" | "generating" | "preview" | "confirm" | "sending" | "sent";
 
 interface JobWithMedia extends Job {
   media: Media[];
@@ -194,7 +194,7 @@ export function ReportPage() {
     bld: Building,
     jobsWithMedia: JobWithMedia[]
   ) => {
-    setStep("loading");
+    setStep("generating");
     setAiError(null);
 
     if (jobsWithMedia.length === 0) {
@@ -280,36 +280,26 @@ export function ReportPage() {
   };
 
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const handleContinue = async () => {
     if (!reportRef.current) return;
     setGeneratingPdf(true);
+    setPdfError(null);
     try {
       const blob = await generatePdfFromElement(reportRef.current);
       setPdfBlob(blob);
+      setStep("confirm");
     } catch (err) {
       console.error("PDF generation error:", err);
-      // Continue anyway — PDF will be regenerated on send if needed
+      setPdfError("No se pudo generar el PDF. Intentá de nuevo.");
+    } finally {
+      setGeneratingPdf(false);
     }
-    setGeneratingPdf(false);
-    setStep("confirm");
   };
 
   const handleSend = async () => {
-    if (!building) return;
-    // If PDF wasn't generated (error during handleContinue), try again
-    let pdf = pdfBlob;
-    if (!pdf && reportRef.current) {
-      try {
-        pdf = await generatePdfFromElement(reportRef.current);
-      } catch {
-        // Can't generate PDF at all
-      }
-    }
-    if (!pdf) {
-      setSendError("No se pudo generar el PDF. Volvé al preview e intentá de nuevo.");
-      return;
-    }
+    if (!building || !pdfBlob) return;
     setStep("sending");
     setSendError(null);
 
@@ -318,7 +308,7 @@ export function ReportPage() {
       await supabase.storage.from("media").remove([pdfPath]);
       const { error: uploadErr } = await supabase.storage
         .from("media")
-        .upload(pdfPath, pdf, { contentType: "application/pdf" });
+        .upload(pdfPath, pdfBlob, { contentType: "application/pdf" });
 
       if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
 
@@ -398,18 +388,22 @@ export function ReportPage() {
     );
   }
 
-  // -- Loading --
-  if (step === "loading") {
+  // -- Loading / Generating --
+  if (step === "loading" || step === "generating") {
     return (
       <div className="flex flex-col items-center gap-4 py-24">
         <div className="flex size-16 items-center justify-center rounded-2xl bg-amber-50">
           <Loader2 className="size-8 animate-spin text-amber-500" />
         </div>
         <div className="text-center">
-          <p className="text-base font-semibold text-slate-800">Generando reporte</p>
-          <p className="mt-1 text-sm text-slate-500">
-            Estamos usando IA para mejorar las descripciones...
+          <p className="text-base font-semibold text-slate-800">
+            {step === "generating" ? "Generando reporte" : "Cargando reporte"}
           </p>
+          {step === "generating" && (
+            <p className="mt-1 text-sm text-slate-500">
+              Estamos usando IA para mejorar las descripciones...
+            </p>
+          )}
         </div>
       </div>
     );
@@ -604,6 +598,13 @@ export function ReportPage() {
               Se usaron las descripciones originales. Podés editarlas manualmente haciendo click en el texto.
             </p>
           </div>
+        </div>
+      )}
+
+      {pdfError && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+          <AlertTriangle className="size-5 shrink-0 text-red-500 mt-0.5" />
+          <p className="text-sm font-medium text-red-800">{pdfError}</p>
         </div>
       )}
 
