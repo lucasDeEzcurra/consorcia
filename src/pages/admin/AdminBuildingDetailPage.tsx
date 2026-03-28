@@ -14,6 +14,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { uploadEntityPhoto } from "@/lib/storage";
 import {
   ArrowLeft,
   Save,
@@ -28,6 +29,7 @@ import {
   Users,
   Plus,
   Phone,
+  ImagePlus,
 } from "lucide-react";
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
@@ -65,6 +67,10 @@ export function AdminBuildingDetailPage() {
   const [address, setAddress] = useState("");
   const [supervisorId, setSupervisorId] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Logo
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   // Delete
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -109,6 +115,7 @@ export function AdminBuildingDetailPage() {
         setName(bld.name);
         setAddress(bld.address);
         setSupervisorId(bld.supervisor_id ?? "");
+        setLogoUrl(bld.logo_url);
       }
       setSupervisors((supRes.data ?? []) as Supervisor[]);
       setJobs((jobRes.data ?? []) as Job[]);
@@ -177,6 +184,17 @@ export function AdminBuildingDetailPage() {
       .single();
     setSelectedRequestTenant(tenantData as Tenant | null);
     setRequestDialogOpen(true);
+  };
+
+  const handleLogoUpload = async (file: File) => {
+    if (!id) return;
+    setUploadingLogo(true);
+    const url = await uploadEntityPhoto("buildings", id, file);
+    if (url) {
+      await supabase.from("buildings").update({ logo_url: url }).eq("id", id);
+      setLogoUrl(url);
+    }
+    setUploadingLogo(false);
   };
 
   const handleSave = async (e: FormEvent) => {
@@ -292,6 +310,39 @@ export function AdminBuildingDetailPage() {
       {/* Edit form */}
       <form onSubmit={handleSave} className="max-w-md space-y-4 rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
         <p className="text-sm font-semibold text-slate-800">Datos del edificio</p>
+
+        {/* Logo upload */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-slate-500">Foto del edificio</label>
+          <div className="flex items-center gap-3">
+            <label className="group relative flex h-20 w-32 cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 transition-colors hover:border-amber-400">
+              {logoUrl ? (
+                <img src={logoUrl} alt="Logo" className="size-full object-cover" />
+              ) : (
+                <ImagePlus className="size-6 text-slate-300" />
+              )}
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                {uploadingLogo ? (
+                  <Loader2 className="size-5 animate-spin text-white" />
+                ) : (
+                  <ImagePlus className="size-5 text-white" />
+                )}
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleLogoUpload(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <p className="text-[11px] text-slate-400">Aparece en el encabezado de los reportes</p>
+          </div>
+        </div>
+
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-slate-500">Nombre</label>
           <Input value={name} onChange={(e) => setName(e.target.value)} required className="h-10 rounded-xl" />

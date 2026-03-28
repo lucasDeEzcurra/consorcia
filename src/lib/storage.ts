@@ -32,6 +32,23 @@ export async function insertMediaRecords(
   );
 }
 
+export async function uploadEntityPhoto(
+  entity: "supervisors" | "buildings",
+  entityId: string,
+  file: File
+): Promise<string | null> {
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `${entity}/${entityId}/photo.${ext}`;
+
+  await supabase.storage.from("media").remove([path]);
+
+  const { error } = await supabase.storage.from("media").upload(path, file);
+  if (error) return null;
+
+  const { data } = supabase.storage.from("media").getPublicUrl(path);
+  return data.publicUrl;
+}
+
 export async function deleteMediaFile(url: string) {
   // Extract path after bucket name in the URL
   const match = url.match(/\/storage\/v1\/object\/public\/media\/(.+)/);

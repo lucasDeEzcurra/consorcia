@@ -4,7 +4,8 @@ import { supabase } from "@/lib/supabase";
 import type { Supervisor, Building } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Building2, Save, Trash2, Plus, Loader2, AlertTriangle } from "lucide-react";
+import { uploadEntityPhoto } from "@/lib/storage";
+import { ArrowLeft, Building2, Save, Trash2, Plus, Loader2, AlertTriangle, Camera } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,10 @@ export function SupervisorDetailPage() {
   // Assign dialog
   const [assignOpen, setAssignOpen] = useState(false);
 
+  // Photo
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
   // Delete
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -53,6 +58,7 @@ export function SupervisorDetailPage() {
       if (sup) {
         setName(sup.name);
         setPhone(sup.phone_number);
+        setPhotoUrl(sup.photo_url);
       }
       setBuildings((bldRes.data ?? []) as Building[]);
       setUnassigned((allBldRes.data ?? []) as Building[]);
@@ -77,6 +83,17 @@ export function SupervisorDetailPage() {
       .eq("id", id);
     setSaving(false);
     fetchData();
+  };
+
+  const handlePhotoUpload = async (file: File) => {
+    if (!id) return;
+    setUploadingPhoto(true);
+    const url = await uploadEntityPhoto("supervisors", id, file);
+    if (url) {
+      await supabase.from("supervisors").update({ photo_url: url }).eq("id", id);
+      setPhotoUrl(url);
+    }
+    setUploadingPhoto(false);
   };
 
   const assignBuilding = async (buildingId: string) => {
@@ -138,6 +155,39 @@ export function SupervisorDetailPage() {
       {/* Edit form */}
       <form onSubmit={handleSave} className="max-w-md space-y-4 rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
         <p className="text-sm font-semibold text-slate-800">Datos del supervisor</p>
+
+        {/* Photo upload */}
+        <div className="flex items-center gap-4">
+          <label className="group relative flex size-20 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-slate-200 bg-slate-50 transition-colors hover:border-amber-400">
+            {photoUrl ? (
+              <img src={photoUrl} alt="Foto" className="size-full object-cover" />
+            ) : (
+              <Camera className="size-6 text-slate-300" />
+            )}
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+              {uploadingPhoto ? (
+                <Loader2 className="size-5 animate-spin text-white" />
+              ) : (
+                <Camera className="size-5 text-white" />
+              )}
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handlePhotoUpload(file);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          <div>
+            <p className="text-xs font-medium text-slate-500">Foto de perfil</p>
+            <p className="text-[11px] text-slate-400">Aparece en los reportes</p>
+          </div>
+        </div>
+
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-slate-500">Nombre</label>
           <Input value={name} onChange={(e) => setName(e.target.value)} required className="h-10 rounded-xl" />

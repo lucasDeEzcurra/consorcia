@@ -12,6 +12,7 @@ export interface Supervisor {
   user_id: string;
   name: string;
   phone_number: string;
+  photo_url: string | null;
   created_at: string;
 }
 
@@ -21,6 +22,7 @@ export interface Building {
   address: string;
   supervisor_id: string | null;
   emails: string[];
+  logo_url: string | null;
   created_at: string;
 }
 

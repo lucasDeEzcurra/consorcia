@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams, Link, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { generateReportPdf } from "@/lib/pdf";
-import type { Building, Job, Media, Report } from "@/types/database";
+import type { Building, Job, Media, Report, Supervisor } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Mail,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 const serif = { fontFamily: "'Instrument Serif', Georgia, serif" };
@@ -59,6 +61,10 @@ export function ReportPage() {
   const [building, setBuilding] = useState<Building | null>(null);
   const [jobs, setJobs] = useState<JobWithMedia[]>([]);
   const [existingReport, setExistingReport] = useState<Report | null>(null);
+  const [supervisor, setSupervisor] = useState<Supervisor | null>(null);
+
+  // Photo exclusion
+  const [excludedMedia, setExcludedMedia] = useState<Set<string>>(new Set());
 
   // Report text (editable)
   const [summary, setSummary] = useState("");
@@ -91,6 +97,16 @@ export function ReportPage() {
       if (!bld) {
         setStep("preview");
         return;
+      }
+
+      // Fetch supervisor if assigned
+      if (bld.supervisor_id) {
+        const { data: supData } = await supabase
+          .from("supervisors")
+          .select("*")
+          .eq("id", bld.supervisor_id)
+          .single();
+        setSupervisor(supData as Supervisor | null);
       }
 
       // Fetch report — use .maybeSingle() to avoid error on 0 rows
@@ -290,13 +306,18 @@ export function ReportPage() {
       const blob = await generateReportPdf({
         buildingName: building.name,
         buildingAddress: building.address,
+        buildingLogoUrl: building.logo_url,
+        supervisorName: supervisor?.name,
+        supervisorPhotoUrl: supervisor?.photo_url,
         month: formatMonthLabel(month),
         summary,
         closing,
         jobs: jobs.map((j) => ({
           description: j.improved_description,
           completedAt: formatDate(j.completed_at!),
-          media: j.media.map((m) => ({ url: m.url, type: m.type })),
+          media: j.media
+            .filter((m) => !excludedMedia.has(m.id))
+            .map((m) => ({ url: m.url, type: m.type })),
         })),
       });
       setPdfBlob(blob);
@@ -633,15 +654,41 @@ export function ReportPage() {
         style={{ fontFamily: "Georgia, serif" }}
       >
         {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-slate-900" style={{ fontFamily: "Georgia, serif" }}>
-            Informe de Gestión Mensual
-          </h1>
-          <p className="mt-2 text-lg text-slate-600">{building?.name}</p>
-          <p className="text-sm text-slate-500">{building?.address}</p>
-          <p className="mt-1 text-sm text-slate-500 capitalize">
-            {formatMonthLabel(month)}
-          </p>
+        <div className="mb-8">
+          <div className="flex items-center gap-4">
+            {building?.logo_url && (
+              <img
+                src={building.logo_url}
+                alt={building.name}
+                className="size-16 rounded-xl object-cover border border-slate-200"
+              />
+            )}
+            <div className={building?.logo_url ? "" : "text-center w-full"}>
+              <h1 className="text-2xl font-bold text-slate-900" style={{ fontFamily: "Georgia, serif" }}>
+                Informe de Gestión Mensual
+              </h1>
+              <p className="mt-1 text-lg text-slate-600">{building?.name}</p>
+              <p className="text-sm text-slate-500">{building?.address}</p>
+              <p className="mt-0.5 text-sm text-slate-500 capitalize">
+                {formatMonthLabel(month)}
+              </p>
+            </div>
+          </div>
+          {supervisor && (
+            <div className="mt-4 flex items-center gap-3 rounded-lg bg-slate-50 px-4 py-2.5">
+              {supervisor.photo_url ? (
+                <img src={supervisor.photo_url} alt={supervisor.name} className="size-10 rounded-full object-cover" />
+              ) : (
+                <div className="flex size-10 items-center justify-center rounded-full bg-amber-100 text-sm font-bold text-amber-700">
+                  {supervisor.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-slate-400">Supervisor</p>
+                <p className="text-sm font-medium text-slate-700">{supervisor.name}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         <hr className="my-6 border-slate-200" />
@@ -709,31 +756,53 @@ export function ReportPage() {
                       {job.media
                         .filter((m) => m.type === "before")
                         .map((m) => (
-                          <div key={m.id}>
+                          <div key={m.id} className="relative group">
                             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                               Antes
                             </p>
                             <img
                               src={m.url}
                               alt="Antes"
-                              className="w-full rounded-lg border border-slate-200 object-cover"
+                              className={`w-full rounded-lg border border-slate-200 object-cover transition-opacity ${excludedMedia.has(m.id) ? "opacity-30" : ""}`}
                               crossOrigin="anonymous"
                             />
+                            <button
+                              onClick={() => setExcludedMedia((prev) => {
+                                const next = new Set(prev);
+                                next.has(m.id) ? next.delete(m.id) : next.add(m.id);
+                                return next;
+                              })}
+                              className="absolute top-6 right-1 flex size-7 items-center justify-center rounded-lg bg-white/90 text-slate-500 shadow-sm opacity-0 transition-opacity group-hover:opacity-100 hover:text-amber-600"
+                              title={excludedMedia.has(m.id) ? "Incluir en PDF" : "Excluir del PDF"}
+                            >
+                              {excludedMedia.has(m.id) ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                            </button>
                           </div>
                         ))}
                       {job.media
                         .filter((m) => m.type === "after")
                         .map((m) => (
-                          <div key={m.id}>
+                          <div key={m.id} className="relative group">
                             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                               Después
                             </p>
                             <img
                               src={m.url}
                               alt="Después"
-                              className="w-full rounded-lg border border-slate-200 object-cover"
+                              className={`w-full rounded-lg border border-slate-200 object-cover transition-opacity ${excludedMedia.has(m.id) ? "opacity-30" : ""}`}
                               crossOrigin="anonymous"
                             />
+                            <button
+                              onClick={() => setExcludedMedia((prev) => {
+                                const next = new Set(prev);
+                                next.has(m.id) ? next.delete(m.id) : next.add(m.id);
+                                return next;
+                              })}
+                              className="absolute top-6 right-1 flex size-7 items-center justify-center rounded-lg bg-white/90 text-slate-500 shadow-sm opacity-0 transition-opacity group-hover:opacity-100 hover:text-amber-600"
+                              title={excludedMedia.has(m.id) ? "Incluir en PDF" : "Excluir del PDF"}
+                            >
+                              {excludedMedia.has(m.id) ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                            </button>
                           </div>
                         ))}
                     </div>
