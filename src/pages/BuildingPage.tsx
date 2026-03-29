@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import type { Building, Job, Media, Report, TenantRequest, RequestMedia, Tenant } from "@/types/database";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +62,7 @@ const tabs: { id: TabId; label: string; icon: typeof ClipboardList }[] = [
 
 export function BuildingPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [building, setBuilding] = useState<Building | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("pending");
@@ -75,7 +76,6 @@ export function BuildingPage() {
 
   // Reports
   const [reports, setReports] = useState<Report[]>([]);
-  const [generatingReport, setGeneratingReport] = useState(false);
 
   // Emails
   const [newEmail, setNewEmail] = useState("");
@@ -289,49 +289,10 @@ export function BuildingPage() {
     setBuilding({ ...building, emails: updated });
   };
 
-  // Report generation
-  const generateReport = async () => {
+  // Report generation — navigate directly to the report page which handles AI generation
+  const generateReport = () => {
     if (!building) return;
-    const month = currentMonth();
-
-    setGeneratingReport(true);
-
-    const monthStart = `${month}-01T00:00:00.000Z`;
-    const [y, m] = month.split("-");
-    const nextMonth = new Date(Number(y), Number(m), 1).toISOString();
-
-    const { data: jobs } = await supabase
-      .from("jobs")
-      .select("*")
-      .eq("building_id", building.id)
-      .eq("status", "completed")
-      .gte("completed_at", monthStart)
-      .lt("completed_at", nextMonth);
-
-    const jobsList = (jobs as Job[]) ?? [];
-    const summaryText = jobsList
-      .map(
-        (j) =>
-          `- ${j.description_original} (completado: ${formatDate(j.completed_at!)})`
-      )
-      .join("\n");
-
-    const reportData = {
-      building_id: building.id,
-      month,
-      status: "draft" as const,
-      generated_text: `Informe de Gestión Mensual\n${building.name}\n${formatMonthLabel(month)}\n\nTrabajos completados:\n${summaryText || "No hay trabajos completados este mes."}`,
-    };
-
-    const existing = reports.find((r) => r.month === month);
-    if (existing) {
-      await supabase.from("reports").update(reportData).eq("id", existing.id);
-    } else {
-      await supabase.from("reports").insert(reportData);
-    }
-
-    setGeneratingReport(false);
-    fetchReports();
+    navigate(`/buildings/${building.id}/report?month=${currentMonth()}`);
   };
 
   if (loading) {
@@ -674,33 +635,18 @@ export function BuildingPage() {
                   size="sm"
                   variant="outline"
                   onClick={generateReport}
-                  disabled={generatingReport}
                   className="rounded-xl"
                 >
-                  {generatingReport ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      Regenerando...
-                    </>
-                  ) : (
-                    "Regenerar reporte"
-                  )}
+                  Regenerar reporte
                 </Button>
               </div>
             ) : (
               <Button
                 onClick={generateReport}
-                disabled={generatingReport || completedJobs.length === 0}
+                disabled={completedJobs.length === 0}
                 className="h-11 rounded-xl bg-amber-500 px-6 text-[#0b1120] hover:bg-amber-400"
               >
-                {generatingReport ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    Generando...
-                  </>
-                ) : (
-                  "Generar Reporte"
-                )}
+                Generar Reporte
               </Button>
             )}
 
