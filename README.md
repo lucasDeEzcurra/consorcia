@@ -168,7 +168,7 @@ supabase/
 
 - **Mercado**: +30,000 administraciones de consorcios solo en Argentina
 - **Modelo**: SaaS mensual por administración, precio escalonado por cantidad de edificios
-- **Costos operativos**: cercanos a cero — Groq free tier para transcripción, SMTP gratuito para emails, Supabase free tier para DB y storage
+- **Costos operativos**: cercanos a cero — Unico gasto son los modelos de AI
 - **Escalabilidad**: cada administración nueva es solo datos, no hay configuración custom
 - **MVP real**: no es un mockup, funciona end-to-end — Telegram, transcripción, base de datos, dashboard, reportes con IA, envío de emails
 
