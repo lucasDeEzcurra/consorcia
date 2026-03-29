@@ -34,7 +34,25 @@ El bot te va a mostrar los edificios asignados a ese supervisor y vas a poder cr
 
 > **Nota:** Usamos Telegram en vez de WhatsApp porque al ser un MVP, Telegram nos permite implementar un bot funcional gratis y al instante, sin costos de API ni procesos de aprobación. En producción se migraría a WhatsApp Business API, pero la experiencia del usuario sería idéntica.
 
-### 3. Entrar como supervisor en la web
+### 3. Probar el bot como inquilino
+
+Los inquilinos también pueden reportar problemas desde Telegram. Para probarlo:
+
+1. Logueate como **admin** en la web
+2. Andá a **Edificios** y elegí cualquier edificio (ej: Torre Rivadavia)
+3. En la sección **Inquilinos**, clickeá **Agregar inquilino**
+4. Completá: nombre, tu **Telegram ID** (el mismo que usaste antes con `@userinfobot`), y opcionalmente el número de unidad (ej: "3B")
+5. Abrí **@consorcia_bot** en Telegram y mandá cualquier mensaje
+
+Si tu Telegram ID está registrado como inquilino, el bot te va a mostrar el menú de inquilino con las opciones:
+- **Nuevo reclamo**: describí el problema (texto o audio), elegí categoría (plomería, electricidad, ascensor, etc.), nivel de urgencia, y opcionalmente adjuntá fotos
+- **Mis reclamos**: vé el estado de tus reclamos anteriores (pendiente, en progreso, resuelto, rechazado)
+
+Los reclamos aparecen automáticamente en el panel web del supervisor y del admin, en la pestaña **Reclamos** del edificio correspondiente.
+
+> **Importante:** Un mismo Telegram ID no puede estar registrado como supervisor e inquilino a la vez. Si querés probar ambos flujos, usá el Telegram ID de un compañero para el otro rol, o cambiá el ID entre pruebas.
+
+### 4. Entrar como supervisor en la web
 
 También podés ver el panel web de cada supervisor:
 
